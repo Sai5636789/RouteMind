@@ -1,0 +1,81 @@
+# RouteMind — local development stack.
+#   docker compose up --build
+# Frontend on http://localhost:4200, API on http://localhost:8080.
+# All credentials here are local-dev defaults; override them in a .env file
+# (see .env.example) and never commit real secrets.
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: routemind-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-routemind}
+      POSTGRES_USER: ${POSTGRES_USER:-routemind}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-routemind_dev}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - routemind-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-routemind} -d $${POSTGRES_DB:-routemind}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - routemind
+
+  redis:
+    image: redis:7-alpine
+    container_name: routemind-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - routemind-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - routemind
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: routemind-api
+    environment:
+      PORT: 8080
+      DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-routemind}
+      DATABASE_USERNAME: ${POSTGRES_USER:-routemind}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-routemind_dev}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - routemind
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: routemind-web
+    ports:
+      - "${FRONTEND_PORT:-4200}:80"
+    depends_on:
+      - backend
+    networks:
+      - routemind
+
+volumes:
+  routemind-db-data:
+  routemind-redis-data:
+
+networks:
+  routemind:

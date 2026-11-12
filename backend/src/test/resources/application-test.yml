@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/routemind_test
+    username: routemind
+    password: routemind_dev
+  data:
+    redis:
+      host: localhost
+      port: 6379

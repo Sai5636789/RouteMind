@@ -1,0 +1,48 @@
+# RouteMind API configuration.
+# Every environment-specific value comes from the environment (or .env via
+# docker compose). The defaults are local-development values only.
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: routemind
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/routemind}
+    username: ${DATABASE_USERNAME:routemind}
+    password: ${DATABASE_PASSWORD:routemind_dev}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  mvc:
+    # Unmapped API paths throw instead of falling through to the default
+    # error page, so GlobalExceptionHandler controls the error shape.
+    throw-exception-if-no-handler-found: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      # Local development only: restrict this before any shared deployment.
+      show-details: always
+
+logging:
+  level:
+    com.routemind: INFO
+    org.flywaydb: INFO
