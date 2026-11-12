@@ -53,10 +53,53 @@ Remaining issues:
   password, not Kerberos, and GSSAPI-enabled Postgres servers answer 'G'
   to the driver's GSS probe, which fails without Kerberos credentials.
 
-## Backend APIs — next
+## Backend APIs — completed Nov 12, 2026
 
-Vehicle, driver and order entities; CRUD endpoints; validation, error
-handling and API tests.
+- Flyway migration `V2`: `vehicles`, `drivers`, `orders` tables with unique
+  constraints (plate number, license number), check constraints (positive
+  capacity/weight, valid latitude/longitude, valid statuses), foreign keys
+  from orders to vehicles/drivers, and an assignment-completeness check
+  (an order is unassigned, or assigned to both a vehicle and a driver)
+- Fleet module (`com.routemind.fleet`): Vehicle and Driver entities with
+  shared audit timestamps, repositories with status filtering, services
+  that normalize plate/license to upper case and reject duplicates with
+  409, and a guard that an on-route vehicle cannot change status or be
+  deleted
+- Orders module (`com.routemind.orders`): Order entity and a delivery
+  state machine — CREATED → ASSIGNED → IN_TRANSIT → DELIVERED, with
+  CANCELLED from CREATED or ASSIGNED and nothing moving backwards.
+  Assigning checks the vehicle is AVAILABLE, has capacity for the order
+  weight, and the driver is ACTIVE; it takes the vehicle ON_ROUTE, and
+  delivering or cancelling releases it back to AVAILABLE
+- REST controllers for all three resources: full CRUD, status filter on
+  lists, lifecycle endpoints for orders, Bean Validation on every write
+  payload (plate/license patterns, positive capacity/weight, latitude and
+  longitude ranges, phone format), and 404/409 via `GlobalExceptionHandler`
+  (including database integrity violations as 409)
+- List endpoints return a stable `PagedResponse` (`content`, `page`,
+  `size`, `totalElements`, `totalPages`) instead of serializing Spring
+  Data's `Page` directly
+- Tests: 38 passing — controller slice tests for all three resources
+  (happy paths, validation 400s, missing-resource 404s, duplicate 409s,
+  illegal-transition 409s) and service unit tests (state machine,
+  assignment guards, duplicate handling, delete guards)
+
+Verification (Nov 12, 2026, in this sandbox):
+
+- Backend tests for this milestone: 38 passed, 0 failed (controller
+  slices with mocked services, service tests with mocked repositories).
+- Frontend production build: passed (`npm run build`).
+- NOT VERIFIED here: the full backend suite including the foundation
+  integration test (`RouteMindApplicationTests`, 3 errors) — it fails to
+  load the application context because the pgjdbc driver cannot set up
+  an SSL connection to the local Postgres in this sandbox (SQL state
+  08P01), the same environment issue recorded for the foundation. The
+  migration itself has therefore not been applied end to end here; it
+  needs a normal machine or Docker run. No repository-level test was
+  added for the same reason — it would fail on the environment, not the
+  code, and a faked database was not used.
+- NOT VERIFIED here: `docker compose up` and Docker image builds (same
+  sandbox container restriction as the foundation).
 
 ## Dashboard
 

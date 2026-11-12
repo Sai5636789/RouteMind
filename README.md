@@ -67,13 +67,39 @@ error shape), `config`, then `fleet`, `orders`, `tracking`, `dispatch`,
 
 ## API
 
+All endpoints except health require authentication. The token mechanism lands
+with the authentication feature; until then protected endpoints answer 401.
+List endpoints are paginated (`?page=0&size=20&sort=createdAt,desc`) and
+return `{content, page, size, totalElements, totalPages}`. Errors always use
+one shape: `{timestamp, status, error, message, path}`.
+
 | Endpoint | Description |
 | --- | --- |
 | `GET /api/v1/health` | Public liveness probe, `{"status":"UP",...}` |
 | `GET /actuator/health` | Dependency health (Postgres, Redis) |
-
-All other endpoints require authentication. The token mechanism lands with
-the authentication feature; until then protected endpoints answer 401.
+| `GET /api/v1/vehicles?status=` | List vehicles, optionally filtered by status |
+| `GET /api/v1/vehicles/{id}` | Get one vehicle |
+| `POST /api/v1/vehicles` | Register a vehicle (201) |
+| `PUT /api/v1/vehicles/{id}` | Replace a vehicle |
+| `PATCH /api/v1/vehicles/{id}/status` | Change vehicle status |
+| `DELETE /api/v1/vehicles/{id}` | Delete a vehicle (204; not while on a route) |
+| `GET /api/v1/drivers?status=` | List drivers, optionally filtered by status |
+| `GET /api/v1/drivers/{id}` | Get one driver |
+| `POST /api/v1/drivers` | Register a driver (201) |
+| `PUT /api/v1/drivers/{id}` | Replace a driver |
+| `PATCH /api/v1/drivers/{id}/status` | Change driver status |
+| `DELETE /api/v1/drivers/{id}` | Delete a driver (204) |
+| `GET /api/v1/orders?status=` | List orders, optionally filtered by status |
+| `GET /api/v1/orders/{id}` | Get one order |
+| `GET /api/v1/orders/by-vehicle/{vehicleId}` | Orders assigned to a vehicle |
+| `GET /api/v1/orders/by-driver/{driverId}` | Orders assigned to a driver |
+| `POST /api/v1/orders` | Create an order (201, always unassigned) |
+| `PUT /api/v1/orders/{id}` | Edit an order (only while CREATED) |
+| `POST /api/v1/orders/{id}/assign` | Assign vehicle + driver (CREATED → ASSIGNED) |
+| `POST /api/v1/orders/{id}/start-transit` | ASSIGNED → IN_TRANSIT |
+| `POST /api/v1/orders/{id}/deliver` | IN_TRANSIT → DELIVERED, vehicle returns to AVAILABLE |
+| `POST /api/v1/orders/{id}/cancel` | CREATED/ASSIGNED → CANCELLED, vehicle released |
+| `DELETE /api/v1/orders/{id}` | Delete an order (204; only CREATED or CANCELLED) |
 
 ## Configuration
 
