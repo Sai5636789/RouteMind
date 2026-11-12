@@ -46,7 +46,7 @@ services:
     container_name: routemind-api
     environment:
       PORT: 8080
-      DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-routemind}
+      DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-routemind}?gssEncMode=disable
       DATABASE_USERNAME: ${POSTGRES_USER:-routemind}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-routemind_dev}
       REDIS_HOST: redis

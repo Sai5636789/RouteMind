@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/routemind_test
+    url: jdbc:postgresql://localhost:5432/routemind_test?gssEncMode=disable
     username: routemind
     password: routemind_dev
   data:

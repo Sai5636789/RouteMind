@@ -5,8 +5,7 @@ A dispatcher creates delivery orders, registers vehicles, generates optimized
 routes, approves assignments, tracks simulated vehicles in real time, handles
 vehicle breakdowns, and reviews completed deliveries.
 
-Master's-level MVP, built in 10 days (5 hours/day). Local only: no AWS, no
-paid APIs, no cloud deployment.
+Local only: no AWS, no paid APIs, no cloud deployment.
 
 ## Stack
 
@@ -16,8 +15,8 @@ paid APIs, no cloud deployment.
 | Backend | Java 21, Spring Boot 3.4, Spring Data JPA, Spring Security |
 | Database | PostgreSQL 16 + PostGIS |
 | Real-time | Redis GEO, WebSockets (STOMP) |
-| Routing | Self-hosted OSRM (Day 6) |
-| Optimization | Google OR-Tools (Day 7) |
+| Routing | Self-hosted OSRM |
+| Optimization | Google OR-Tools |
 | Infra | Docker Compose |
 
 ## Run locally
@@ -29,7 +28,7 @@ docker compose up --build
 
 - Dashboard: http://localhost:4200
 - API health: http://localhost:8080/api/v1/health
-- Actuator health (DB + Redis): http://localhost:8080/actuator/health
+- Actuator health (Postgres, Redis): http://localhost:8080/actuator/health
 
 Stop with `docker compose down`. Data lives in named volumes
 (`routemind-db-data`, `routemind-redis-data`); `docker compose down -v`
@@ -37,12 +36,12 @@ removes it.
 
 ## Run without Docker
 
-Prerequisites: Java 21, Maven, Node 24, PostgreSQL 16 + PostGIS, Redis 7.
+Prerequisites: Java 21, Maven 3.9, Node 24, PostgreSQL 16 + PostGIS, Redis 7.
 
 ```bash
-# Database (local Postgres): create database routemind owned by user routemind
-# and enable PostGIS — see backend/src/main/resources/db/migration/V1__*.sql
-# for the schema Flyway applies automatically.
+# Database (local Postgres): create a database named routemind owned by user
+# routemind and enable PostGIS. Flyway applies the schema automatically on
+# first backend start — see backend/src/main/resources/db/migration/.
 
 # Backend
 cd backend
@@ -57,14 +56,14 @@ npm start
 ## Project layout
 
 ```
-backend/    Spring Boot API (modular monolith: one module per domain area)
+backend/    Spring Boot API (modular monolith: one package per domain area)
 frontend/   Angular dashboard
 docker-compose.yml
 ```
 
-Backend modules (added as the days land): `health`, `common` (error shape),
-`config`, then `fleet`, `orders`, `tracking`, `dispatch`, `optimization`,
-`incidents`, `simulation`, `analytics`.
+Backend packages (added as the features land): `health`, `common` (shared
+error shape), `config`, then `fleet`, `orders`, `tracking`, `dispatch`,
+`optimization`, `incidents`, `simulation`, `analytics`.
 
 ## API
 
@@ -74,7 +73,7 @@ Backend modules (added as the days land): `health`, `common` (error shape),
 | `GET /actuator/health` | Dependency health (Postgres, Redis) |
 
 All other endpoints require authentication. The token mechanism lands with
-the authentication module (Day 2); until then protected endpoints answer 401.
+the authentication feature; until then protected endpoints answer 401.
 
 ## Configuration
 
@@ -84,6 +83,6 @@ local-development values only.
 
 ## Development plan
 
-See [PROGRESS.md](PROGRESS.md). Day 1: foundation (this repo). Day 10
-target: 5–10 simulated vehicles, 20–50 orders, live Redis tracking, at least
-one verified OR-Tools optimization.
+See [PROGRESS.md](PROGRESS.md). Target for the finished MVP: 5–10 simulated
+vehicles, 20–50 orders, live Redis tracking, and at least one verified
+OR-Tools optimization.

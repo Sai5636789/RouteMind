@@ -9,7 +9,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /**
  * Redis wiring. The connection itself is configured in application.yml
- * (spring.data.redis.*). Day 5's live tracking uses this template's
+ * (spring.data.redis.*). Real-time tracking uses this template's
  * geo operations; nothing reads or writes Redis yet.
  */
 @Configuration

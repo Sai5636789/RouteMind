@@ -13,7 +13,7 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
  * Stateless API security. Health endpoints are public so load balancers,
  * Docker healthchecks and the dashboard can probe the service. Everything
  * else requires authentication; the token mechanism itself lands with the
- * authentication module (Day 2), so until then protected endpoints answer
+ * authentication feature, so until then protected endpoints answer
  * 401 rather than silently allowing access.
  */
 @Configuration

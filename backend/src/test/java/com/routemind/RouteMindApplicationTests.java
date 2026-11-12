@@ -12,7 +12,7 @@ import org.springframework.test.context.ActiveProfiles;
 /**
  * Foundation smoke test: the application context loads, Flyway migrated the
  * test database (PostGIS + seeded depot), and Redis answers a ping.
- * If any of those fail, Day 1 is not actually done.
+ * If any of those fail, the foundation is not actually done.
  */
 @SpringBootTest
 @ActiveProfiles("test")

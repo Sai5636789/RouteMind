@@ -1,0 +1,32 @@
+// M3 toolbars no longer take their color from the `color` input, so the
+// brand color is set explicitly from the theme tokens.
+.app-toolbar {
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+}
+
+.brand {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.subtitle {
+  margin-left: 16px;
+  font-size: 14px;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.content {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.footer {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.54);
+}

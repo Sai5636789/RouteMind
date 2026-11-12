@@ -8,7 +8,10 @@ spring:
   application:
     name: routemind
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/routemind}
+    # gssEncMode=disable: this app authenticates with a password, not Kerberos.
+    # GSSAPI-enabled servers answer 'G' to the driver's GSS probe, and without
+    # Kerberos credentials the handshake fails and breaks the connection.
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/routemind?gssEncMode=disable}
     username: ${DATABASE_USERNAME:routemind}
     password: ${DATABASE_PASSWORD:routemind_dev}
   jpa:

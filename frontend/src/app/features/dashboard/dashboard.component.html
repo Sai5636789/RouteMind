@@ -1,0 +1,61 @@
+@if (state() === 'loading') {
+  <div class="loading">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Checking backend health…</p>
+  </div>
+} @else if (state() === 'error') {
+  <mat-card class="error-card">
+    <mat-card-header>
+      <mat-card-title>Backend unreachable</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <p>
+        The RouteMind API is not answering. Start the backend
+        (<code>docker compose up</code> or <code>mvn spring-boot:run</code>)
+        and try again.
+      </p>
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-raised-button color="primary" (click)="refresh()">Retry</button>
+    </mat-card-actions>
+  </mat-card>
+} @else {
+  <div class="cards">
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>API</mat-card-title>
+        <span class="status-pill" [class.up]="apiHealth()?.status === 'UP'">
+          {{ apiHealth()?.status }}
+        </span>
+      </mat-card-header>
+      <mat-card-content>
+        <dl>
+          <dt>Service</dt>
+          <dd>{{ apiHealth()?.service }}</dd>
+          <dt>Checked at</dt>
+          <dd>{{ apiHealth()?.timestamp }}</dd>
+        </dl>
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-button color="primary" (click)="refresh()">Refresh</button>
+      </mat-card-actions>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Dependencies</mat-card-title>
+        <span class="status-pill" [class.up]="dependencies()?.status === 'UP'">
+          {{ dependencies()?.status }}
+        </span>
+      </mat-card-header>
+      <mat-card-content>
+        <dl>
+          <dt>PostgreSQL</dt>
+          <dd>{{ dependencyStatus('db') }}</dd>
+          <dt>Redis</dt>
+          <dd>{{ dependencyStatus('redis') }}</dd>
+        </dl>
+      </mat-card-content>
+    </mat-card>
+  </div>
+}
