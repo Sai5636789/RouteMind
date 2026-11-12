@@ -1,7 +1,9 @@
+<h1 class="page-title">Overview</h1>
+
 @if (state() === 'loading') {
   <div class="loading">
     <mat-spinner diameter="40"></mat-spinner>
-    <p>Checking backend health…</p>
+    <p>Loading fleet overview…</p>
   </div>
 } @else if (state() === 'error') {
   <mat-card class="error-card">
@@ -20,6 +22,27 @@
     </mat-card-actions>
   </mat-card>
 } @else {
+  @if (hasDataError()) {
+    <mat-card class="warning-card">
+      <mat-card-content>{{ dataError() }}</mat-card-content>
+      <mat-card-actions>
+        <button mat-button color="primary" (click)="refresh()">Retry</button>
+      </mat-card-actions>
+    </mat-card>
+  }
+
+  <div class="kpis">
+    @for (kpi of kpis(); track kpi.label) {
+      <mat-card class="kpi" [routerLink]="kpi.link">
+        <mat-card-content>
+          <div class="kpi-value">{{ kpi.value }}</div>
+          <div class="kpi-label">{{ kpi.label }}</div>
+          <div class="kpi-detail">{{ kpi.detail }}</div>
+        </mat-card-content>
+      </mat-card>
+    }
+  </div>
+
   <div class="cards">
     <mat-card>
       <mat-card-header>

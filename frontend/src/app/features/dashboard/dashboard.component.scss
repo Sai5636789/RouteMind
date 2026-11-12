@@ -1,3 +1,9 @@
+.page-title {
+  margin: 0 0 16px;
+  font-size: 24px;
+  font-weight: 500;
+}
+
 .loading {
   display: flex;
   flex-direction: column;
@@ -7,14 +13,45 @@
   color: rgba(0, 0, 0, 0.6);
 }
 
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.kpi {
+  cursor: pointer;
+}
+
+.kpi-value {
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.kpi-label {
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.kpi-detail {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+  margin-top: 2px;
+}
+
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
 }
 
-.error-card {
-  max-width: 560px;
+.error-card,
+.warning-card {
+  max-width: 720px;
+  margin-bottom: 16px;
 }
 
 .status-pill {

@@ -1,10 +1,42 @@
-<mat-toolbar class="app-toolbar">
-  <span class="brand">RouteMind</span>
-  <span class="subtitle">Fleet tracking &amp; route optimization</span>
-</mat-toolbar>
+<mat-sidenav-container class="shell">
+  <mat-sidenav
+    #sidenav
+    class="sidenav"
+    [mode]="isHandset() ? 'over' : 'side'"
+    [opened]="!isHandset()"
+  >
+    <div class="brand">
+      <span class="brand-name">RouteMind</span>
+      <span class="brand-sub">Fleet tracking &amp; route optimization</span>
+    </div>
+    <mat-nav-list>
+      @for (item of navItems; track item.path) {
+        <a
+          mat-list-item
+          [routerLink]="item.path"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: item.path === '/' }"
+          (click)="isHandset() && sidenav.close()"
+        >
+          <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+          <span matListItemTitle>{{ item.label }}</span>
+        </a>
+      }
+    </mat-nav-list>
+  </mat-sidenav>
 
-<main class="content">
-  <router-outlet></router-outlet>
-</main>
+  <mat-sidenav-content>
+    <mat-toolbar class="app-toolbar">
+      @if (isHandset()) {
+        <button mat-icon-button (click)="sidenav.toggle()" aria-label="Open menu">
+          <mat-icon>menu</mat-icon>
+        </button>
+      }
+      <span class="toolbar-title">RouteMind</span>
+    </mat-toolbar>
 
-<footer class="footer">RouteMind — local development build</footer>
+    <main class="content">
+      <router-outlet></router-outlet>
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

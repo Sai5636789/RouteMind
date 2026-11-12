@@ -1,32 +1,50 @@
 // M3 toolbars no longer take their color from the `color` input, so the
 // brand color is set explicitly from the theme tokens.
-.app-toolbar {
-  background: var(--mat-sys-primary);
-  color: var(--mat-sys-on-primary);
+.shell {
+  height: 100vh;
+}
+
+.sidenav {
+  width: 248px;
 }
 
 .brand {
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 20px 16px 12px;
 }
 
-.subtitle {
-  margin-left: 16px;
-  font-size: 14px;
-  font-weight: 400;
-  opacity: 0.85;
+.brand-name {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--mat-sys-primary);
+}
+
+.brand-sub {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.active {
+  background: var(--mat-sys-primary-container);
+}
+
+.app-toolbar {
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.toolbar-title {
+  font-weight: 600;
 }
 
 .content {
-  max-width: 960px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 24px 16px;
-}
-
-.footer {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 16px;
-  font-size: 12px;
-  color: rgba(0, 0, 0, 0.54);
+  padding: 24px 16px 48px;
 }

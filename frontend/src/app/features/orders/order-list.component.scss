@@ -1,0 +1,84 @@
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.filter {
+  width: 220px;
+  margin-bottom: 8px;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 64px 0;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.error-card,
+.empty-card {
+  max-width: 560px;
+}
+
+.inline-error {
+  color: #c62828;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+}
+
+.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.status-pill {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: #e0e0e0;
+  color: rgba(0, 0, 0, 0.87);
+}
+
+.status-created {
+  background: #e0e0e0;
+  color: rgba(0, 0, 0, 0.87);
+}
+
+.status-assigned {
+  background: #bbdefb;
+  color: #0d47a1;
+}
+
+.status-in_transit {
+  background: #ffe0b2;
+  color: #e65100;
+}
+
+.status-delivered {
+  background: #c8e6c9;
+  color: #1b5e20;
+}
+
+.status-cancelled {
+  background: #ffcdd2;
+  color: #b71c1c;
+}

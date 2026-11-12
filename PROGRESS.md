@@ -101,9 +101,47 @@ Verification (Nov 12, 2026, in this sandbox):
 - NOT VERIFIED here: `docker compose up` and Docker image builds (same
   sandbox container restriction as the foundation).
 
-## Dashboard
+## Dashboard — completed Nov 12, 2026
 
-Sidebar, KPI cards, vehicle and order tables, create/edit forms.
+- Sidebar layout (responsive: overlay drawer on handsets, fixed rail on
+  desktop) with Overview / Vehicles / Drivers / Orders navigation
+- Overview: KPI cards computed from the live vehicle, driver and order
+  APIs (fleet size, available/on-route, active/delivered orders, active
+  drivers), plus the API and dependency health cards from the foundation
+- Vehicles and Drivers: status-filtered, paginated tables; create/edit
+  dialogs with backend-matching validation; delete with a confirmation
+  dialog
+- Orders: status-filtered, paginated table; create/edit dialogs; assign
+  dialog (available vehicles that can carry the order weight + active
+  drivers); lifecycle actions shown only when the order's status allows
+  them (assign, start transit, deliver, cancel)
+- Every page shows honest loading, empty, and error states. A 401 from
+  the API is surfaced as "sign-in required — authentication not
+  implemented yet", never as invented data
+- Tests: 6 frontend unit tests pass (dashboard KPIs and unreachable
+  state, vehicle table and empty state, order lifecycle actions).
+  Karma runs with a `ChromeHeadlessNoSandbox` launcher for containers
+  that run as root
+
+Verification (Nov 12, 2026, in this sandbox):
+
+- Frontend production build: passed (`npm run build`, Angular 20).
+- Frontend unit tests: 6 passed, 0 failed (Karma + headless Chromium).
+  Two spec bugs were found and fixed during the run: router-linked
+  components need a router provider in tests, and a text count of
+  "Deliver" also matched the "Delivery address" header.
+- NOT VERIFIED here: backend tests — Java and Maven are not installed
+  in this sandbox session, so the backend suite could not be run. No
+  backend code changed in this milestone (frontend only), and the last
+  backend run (38 passed) stands. `docker compose up` and Docker image
+  builds remain unverified here, as before.
+
+Remaining issues:
+
+- Authentication not implemented yet — protected endpoints return 401
+  by design, so the dashboard's tables show the sign-in error until it
+  lands. The dashboard is wired to the real APIs; it just cannot read
+  them yet without auth.
 
 ## Fleet map
 

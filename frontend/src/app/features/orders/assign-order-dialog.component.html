@@ -1,0 +1,51 @@
+<h2 mat-dialog-title>Assign order</h2>
+<mat-dialog-content>
+  <p>
+    Assigning <strong>{{ data.order.customerName }}</strong> ({{ data.order.weightKg }} kg)
+    to a vehicle and a driver.
+  </p>
+  @if (loading()) {
+    <mat-spinner diameter="32"></mat-spinner>
+  } @else if (error()) {
+    <p>{{ error() }}</p>
+  } @else {
+    <form [formGroup]="form" class="form">
+      <mat-form-field appearance="outline">
+        <mat-label>Vehicle</mat-label>
+        <mat-select formControlName="vehicleId">
+          @for (vehicle of availableVehicles(); track vehicle.id) {
+            <mat-option [value]="vehicle.id">
+              {{ vehicle.plateNumber }} — {{ vehicle.model }} ({{ vehicle.capacityKg }} kg)
+            </mat-option>
+          }
+        </mat-select>
+        @if (form.controls.vehicleId.hasError('required')) {
+          <mat-error>Choose a vehicle.</mat-error>
+        }
+      </mat-form-field>
+      @if (availableVehicles().length === 0) {
+        <p>No available vehicle can carry {{ data.order.weightKg }} kg.</p>
+      }
+
+      <mat-form-field appearance="outline">
+        <mat-label>Driver</mat-label>
+        <mat-select formControlName="driverId">
+          @for (driver of activeDrivers(); track driver.id) {
+            <mat-option [value]="driver.id">
+              {{ driver.firstName }} {{ driver.lastName }} — {{ driver.licenseNumber }}
+            </mat-option>
+          }
+        </mat-select>
+        @if (form.controls.driverId.hasError('required')) {
+          <mat-error>Choose a driver.</mat-error>
+        }
+      </mat-form-field>
+    </form>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>Cancel</button>
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="loading() || !!error()">
+    Assign
+  </button>
+</mat-dialog-actions>

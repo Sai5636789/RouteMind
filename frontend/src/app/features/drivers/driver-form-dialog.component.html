@@ -1,0 +1,55 @@
+<h2 mat-dialog-title>{{ isEdit ? 'Edit driver' : 'Add driver' }}</h2>
+<mat-dialog-content>
+  <form [formGroup]="form" class="form">
+    <mat-form-field appearance="outline">
+      <mat-label>First name</mat-label>
+      <input matInput formControlName="firstName" />
+      @if (form.controls.firstName.hasError('required')) {
+        <mat-error>First name is required.</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Last name</mat-label>
+      <input matInput formControlName="lastName" />
+      @if (form.controls.lastName.hasError('required')) {
+        <mat-error>Last name is required.</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>License number</mat-label>
+      <input matInput formControlName="licenseNumber" placeholder="e.g. DL-88412" />
+      @if (form.controls.licenseNumber.hasError('required')) {
+        <mat-error>License number is required.</mat-error>
+      } @else if (form.controls.licenseNumber.hasError('pattern')) {
+        <mat-error>3–30 letters, digits or hyphens.</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Phone (optional)</mat-label>
+      <input matInput formControlName="phone" placeholder="+1 352 555 0100" />
+      @if (form.controls.phone.hasError('pattern')) {
+        <mat-error>Enter a valid phone number.</mat-error>
+      }
+    </mat-form-field>
+
+    @if (isEdit) {
+      <mat-form-field appearance="outline">
+        <mat-label>Status</mat-label>
+        <mat-select formControlName="status">
+          @for (status of statuses; track status) {
+            <mat-option [value]="status">{{ status }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    }
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>Cancel</button>
+  <button mat-raised-button color="primary" (click)="save()">
+    {{ isEdit ? 'Save changes' : 'Add driver' }}
+  </button>
+</mat-dialog-actions>

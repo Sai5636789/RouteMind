@@ -107,6 +107,25 @@ Everything environment-specific comes from the environment — see
 `.env.example` and `backend/src/main/resources/application.yml`. Defaults are
 local-development values only.
 
+## Dispatcher dashboard
+
+The Angular dashboard is the dispatcher's workspace, at
+http://localhost:4200:
+
+- **Overview** — KPI cards (vehicles, orders, drivers) computed from the
+  live APIs, plus API and dependency health.
+- **Vehicles / Drivers** — tables with status filters and pagination,
+  create/edit dialogs with the same validation as the backend, delete
+  with confirmation.
+- **Orders** — table with status filters, create/edit dialogs, assign
+  (one available vehicle + one active driver, capacity-checked), and the
+  lifecycle actions the order's status allows: start transit, deliver,
+  cancel.
+
+Every page has honest loading, empty, and error states. If the API
+cannot be reached, or answers 401 because authentication has not landed
+yet, the page says so and offers a retry — it never shows invented data.
+
 ## Development plan
 
 See [PROGRESS.md](PROGRESS.md). Target for the finished MVP: 5–10 simulated

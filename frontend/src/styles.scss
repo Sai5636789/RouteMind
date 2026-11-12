@@ -1,3 +1,20 @@
+// Bundled Material Symbols font (material-symbols package). mat-icon
+// renders ligature names through this font; without it the names show
+// as clipped text. Bundled rather than loaded from Google Fonts so the
+// app works fully offline.
+@use 'material-symbols/outlined.css';
+
+// Angular Material's mat-icon defaults to the "Material Icons" font;
+// point it at the bundled Symbols font instead.
+.mat-icon {
+  font-family: 'Material Symbols Outlined';
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+}
+
 html,
 body {
   height: 100%;
