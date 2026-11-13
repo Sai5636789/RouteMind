@@ -6,19 +6,24 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import * as L from 'leaflet';
 import { Subscription, forkJoin, of } from 'rxjs';
-import { catchError, finalize } from 'rxjs/operators';
+import { catchError, finalize, map } from 'rxjs/operators';
 import { apiErrorMessage } from '../../core/models/api-error';
 import { Depot } from '../../core/models/depot';
 import { Order } from '../../core/models/order';
 import { Vehicle } from '../../core/models/vehicle';
 import { VehiclePosition } from '../../core/models/vehicle-position';
+import { RoadRoute } from '../../core/models/route';
 import { DepotService } from '../../core/services/depot.service';
 import { OrderService } from '../../core/services/order.service';
+import { RoutingService } from '../../core/services/routing.service';
 import { TrackingConnection, TrackingService } from '../../core/services/tracking.service';
 import { VehicleService } from '../../core/services/vehicle.service';
 import {
   FleetMapView,
+  LatLng,
+  MapRoute,
   MapVehicleMarker,
+  RoadRouteGeometry,
   buildFleetMapView,
   isTerminalOrder,
 } from './fleet-map-view';
@@ -52,11 +57,16 @@ export class FleetMapComponent implements OnInit, OnDestroy {
   private readonly vehicles = inject(VehicleService);
   private readonly orders = inject(OrderService);
   private readonly tracking = inject(TrackingService);
+  private readonly routing = inject(RoutingService);
 
   protected readonly state = signal<LoadState>('loading');
   protected readonly error = signal<string | null>(null);
   protected readonly activeOnly = signal(true);
   protected readonly connection = signal<TrackingConnection>('offline');
+  /** Road routes by vehicle id; empty until the router answers. */
+  private readonly roadRoutes = signal<Map<string, RoadRoute>>(new Map());
+  /** True when at least one road-route request failed — the map then shows straight lines. */
+  protected readonly roadRoutesUnavailable = signal(false);
 
   private readonly depotList = signal<Depot[]>([]);
   private readonly vehicleList = signal<Vehicle[]>([]);
@@ -66,9 +76,25 @@ export class FleetMapComponent implements OnInit, OnDestroy {
   protected readonly shownOrders = computed(() =>
     this.activeOnly() ? this.orderList().filter((o) => !isTerminalOrder(o)) : this.orderList(),
   );
-  protected readonly view = computed<FleetMapView>(() =>
-    buildFleetMapView(this.depotList(), this.vehicleList(), this.shownOrders(), this.livePositions()),
-  );
+  protected readonly view = computed<FleetMapView>(() => {
+    const road = new Map<string, RoadRouteGeometry>();
+    for (const [vehicleId, route] of this.roadRoutes()) {
+      road.set(vehicleId, {
+        points: route.geometry.map(
+          (point): LatLng => [point.latitude, point.longitude],
+        ),
+        distanceMetres: route.distanceMetres,
+        durationSeconds: route.durationSeconds,
+      });
+    }
+    return buildFleetMapView(
+      this.depotList(),
+      this.vehicleList(),
+      this.shownOrders(),
+      this.livePositions(),
+      road,
+    );
+  });
 
   private readonly mapElement = viewChild<ElementRef<HTMLDivElement>>('map');
   private map: L.Map | null = null;
@@ -107,6 +133,8 @@ export class FleetMapComponent implements OnInit, OnDestroy {
   protected load(): void {
     this.state.set('loading');
     this.error.set(null);
+    this.roadRoutes.set(new Map());
+    this.roadRoutesUnavailable.set(false);
     forkJoin({
       depots: this.depots.list().pipe(catchError((e) => of({ error: e }))),
       vehicles: this.vehicles.list(undefined, 0, 100).pipe(catchError((e) => of({ error: e }))),
@@ -125,6 +153,7 @@ export class FleetMapComponent implements OnInit, OnDestroy {
       this.vehicleList.set(vehicles.content);
       this.orderList.set(orders.content);
       this.state.set('ready');
+      this.loadRoadRoutes();
       // Seed the map with the latest stored positions, then subscribe
       // to live broadcasts. Seeding first means markers never jump
       // from a fallback spot to a live one on the first broadcast.
@@ -135,6 +164,54 @@ export class FleetMapComponent implements OnInit, OnDestroy {
         .pipe(finalize(() => this.tracking.connect()))
         .subscribe((positions) => this.tracking.seed(positions));
     });
+  }
+
+  /**
+   * Road routes for every vehicle with active assigned stops: depot, then
+   * the stops in creation order. A failed request leaves that vehicle on
+   * its straight line and raises the fallback note — road routing never
+   * blocks the map, and a missing route is never drawn as a road route.
+   */
+  private loadRoadRoutes(): void {
+    const depot = [...this.depotList()].sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+    if (!depot) {
+      return;
+    }
+    const requests = this.vehicleList()
+      .map((vehicle) => {
+        const active = this.shownOrders().filter(
+          (order) => order.assignedVehicleId === vehicle.id && !isTerminalOrder(order),
+        );
+        if (active.length === 0) {
+          return null;
+        }
+        const points = [
+          { latitude: depot.latitude, longitude: depot.longitude },
+          ...active.map((order) => ({ latitude: order.latitude, longitude: order.longitude })),
+        ];
+        return this.routing.route(points).pipe(
+          catchError(() => {
+            this.roadRoutesUnavailable.set(true);
+            return of(null);
+          }),
+          map((route) => (route ? { vehicleId: vehicle.id, route } : null)),
+        );
+      })
+      .filter((request): request is NonNullable<typeof request> => request !== null);
+    if (requests.length === 0) {
+      return;
+    }
+    this.subscriptions.add(
+      forkJoin(requests).subscribe((results) => {
+        const next = new Map<string, RoadRoute>();
+        for (const result of results) {
+          if (result) {
+            next.set(result.vehicleId, result.route);
+          }
+        }
+        this.roadRoutes.set(next);
+      }),
+    );
   }
 
   protected onActiveOnlyChange(checked: boolean): void {
@@ -241,7 +318,7 @@ export class FleetMapComponent implements OnInit, OnDestroy {
 
     for (const route of view.routes) {
       L.polyline(route.points, { color: route.color, weight: 3, dashArray: '8 6' })
-        .bindTooltip(`${escapeHtml(route.plateNumber)} — stops in creation order`, { sticky: true })
+        .bindTooltip(this.routeTooltip(route), { sticky: true })
         .addTo(this.layers!);
     }
   }
@@ -274,6 +351,15 @@ export class FleetMapComponent implements OnInit, OnDestroy {
       `Status: ${escapeHtml(marker.vehicle.status)}<br>` +
       escapeHtml(this.vehiclePlacementNote(marker))
     );
+  }
+
+  private routeTooltip(route: MapRoute): string {
+    if (route.source === 'road') {
+      const km = ((route.distanceMetres ?? 0) / 1000).toFixed(1);
+      const minutes = Math.round((route.durationSeconds ?? 0) / 60);
+      return `${escapeHtml(route.plateNumber)} — road route · ${km} km · ${minutes} min`;
+    }
+    return `${escapeHtml(route.plateNumber)} — direct line, stops in creation order`;
   }
 
   private plateFor(vehicleId: string): string {

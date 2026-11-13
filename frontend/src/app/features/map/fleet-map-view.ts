@@ -19,8 +19,12 @@ import { VehiclePosition } from '../../core/models/vehicle-position';
  *   vehicle that cannot be placed at all is listed separately, never
  *   guessed.
  * - A route polyline joins the depot to a vehicle's active assigned
- *   stops in creation order. It is a sequence, not an optimized route:
- *   optimized routing arrives with route optimization.
+ *   stops in creation order. When a road route is available for the
+ *   vehicle (see {@link RoadRouteGeometry}), the polyline follows the
+ *   road geometry instead of the straight line; otherwise it is the
+ *   straight depot-to-stops line, labelled as such. It is a sequence,
+ *   not an optimized route: optimized routing arrives with route
+ *   optimization.
  */
 
 export type LatLng = [number, number];
@@ -62,6 +66,18 @@ export interface MapRoute {
   plateNumber: string;
   points: LatLng[];
   color: string;
+  /** 'road' when the polyline follows real roads, 'straight' otherwise. */
+  source: 'road' | 'straight';
+  /** Present only for road routes: the router's own estimates. */
+  distanceMetres?: number;
+  durationSeconds?: number;
+}
+
+/** Road geometry for one vehicle, from the routing API. */
+export interface RoadRouteGeometry {
+  points: LatLng[];
+  distanceMetres: number;
+  durationSeconds: number;
 }
 
 export interface FleetMapView {
@@ -95,6 +111,7 @@ export function buildFleetMapView(
   vehicles: Vehicle[],
   orders: Order[],
   positions: ReadonlyMap<string, VehiclePosition> = new Map(),
+  roadRoutes: ReadonlyMap<string, RoadRouteGeometry> = new Map(),
 ): FleetMapView {
   const depot = [...depots].sort(byCreatedAt)[0] ?? null;
   const depotPosition: LatLng | null = depot ? [depot.latitude, depot.longitude] : null;
@@ -122,6 +139,29 @@ export function buildFleetMapView(
   const withoutPosition: Vehicle[] = [];
   let depotPlaced = 0;
 
+  /**
+   * One vehicle's route. A road route, when the router supplied one,
+   * replaces the straight depot-to-stops line with real road geometry;
+   * otherwise the straight line is used and labelled as such — a road
+   * route is never faked from straight segments.
+   */
+  const addRoute = (vehicleId: string, plateNumber: string, vehicleIndex: number, active: Order[]): void => {
+    const road = roadRoutes.get(vehicleId);
+    const color = ROUTE_COLORS[vehicleIndex % ROUTE_COLORS.length];
+    if (road && road.points.length >= 2) {
+      routes.push({ vehicleId, plateNumber, points: road.points, color, source: 'road',
+        distanceMetres: road.distanceMetres, durationSeconds: road.durationSeconds });
+      return;
+    }
+    const points: LatLng[] = [
+      ...(depotPosition ? [depotPosition] : []),
+      ...active.map((order) => stopByOrderId.get(order.id)!.position),
+    ];
+    if (points.length >= 2) {
+      routes.push({ vehicleId, plateNumber, points, color, source: 'straight' });
+    }
+  };
+
   const orderedVehicles = [...vehicles].sort(byCreatedAt);
   orderedVehicles.forEach((vehicle, vehicleIndex) => {
     const active = activeOrdersByVehicle.get(vehicle.id) ?? [];
@@ -137,18 +177,7 @@ export function buildFleetMapView(
         order: target,
         live,
       });
-      const points: LatLng[] = [
-        ...(depotPosition ? [depotPosition] : []),
-        ...active.map((order) => stopByOrderId.get(order.id)!.position),
-      ];
-      if (points.length >= 2) {
-        routes.push({
-          vehicleId: vehicle.id,
-          plateNumber: vehicle.plateNumber,
-          points,
-          color: ROUTE_COLORS[vehicleIndex % ROUTE_COLORS.length],
-        });
-      }
+      addRoute(vehicle.id, vehicle.plateNumber, vehicleIndex, active);
       return;
     }
     if (active.length > 0) {
@@ -161,18 +190,7 @@ export function buildFleetMapView(
           order: active[0],
         });
       }
-      const points: LatLng[] = [
-        ...(depotPosition ? [depotPosition] : []),
-        ...active.map((order) => stopByOrderId.get(order.id)!.position),
-      ];
-      if (points.length >= 2) {
-        routes.push({
-          vehicleId: vehicle.id,
-          plateNumber: vehicle.plateNumber,
-          points,
-          color: ROUTE_COLORS[vehicleIndex % ROUTE_COLORS.length],
-        });
-      }
+      addRoute(vehicle.id, vehicle.plateNumber, vehicleIndex, active);
       return;
     }
 

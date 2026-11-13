@@ -16,14 +16,17 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
  *
  * TEMPORARY, local-demo only: read (GET) endpoints for vehicles, drivers,
  * orders, depots and tracking are public so the dispatcher dashboard and
- * the fleet map can load data before authentication lands. Every write
- * and every lifecycle action (POST, PUT, PATCH, DELETE) still requires
- * authentication and answers 401 until the token mechanism lands.
- * The /ws endpoint is public for the same reason: it only broadcasts
- * live vehicle positions, and the dashboard cannot subscribe otherwise.
- * This exception must be removed when JWT login is added — see the
- * authentication feature. Do not extend it to writes or to new resources
- * without a deliberate decision.
+ * the fleet map can load data before authentication lands. Road routing
+ * is public too — its endpoints are read-only computations (POST with a
+ * JSON body only because waypoint lists do not belong in a URL) — and the
+ * fleet map cannot draw road routes without it. Every write and every
+ * lifecycle action (POST, PUT, PATCH, DELETE on fleet/orders) still
+ * requires authentication and answers 401 until the token mechanism
+ * lands. The /ws endpoint is public for the same reason: it only
+ * broadcasts live vehicle positions, and the dashboard cannot subscribe
+ * otherwise. This exception must be removed when JWT login is added —
+ * see the authentication feature. Do not extend it to writes or to new
+ * resources without a deliberate decision.
  */
 @Configuration
 public class SecurityConfig {
@@ -34,6 +37,7 @@ public class SecurityConfig {
         "/api/v1/orders/**",
         "/api/v1/depots/**",
         "/api/v1/tracking/**",
+        "/api/v1/routing/**",
     };
 
     @Bean
@@ -49,6 +53,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/health", "/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, TEMPORARY_PUBLIC_READS).permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/routing/**").permitAll()
                         .anyRequest().authenticated())
                 .build();
     }

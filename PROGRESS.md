@@ -264,11 +264,14 @@ the screenshots; markers, routes and panels are real.
 
 Tests: backend tracking suite 23/23 pass (`GeoMathTest`,
 `RouteProgressTest`, `VehiclePositionStoreTest`, `GpsSimulatorTest`,
-`TrackingControllerTest`); full backend suite 65/68 — the 3 errors are
-the pre-existing `RouteMindApplicationTests` context-load failure (the
-integration tests cannot reach local Postgres from the test JVM; the
-same app runs fine as a jar). Frontend: 16/16 tests pass, production
-build passes (pre-existing 500 kB bundle-budget warning unchanged).
+`TrackingControllerTest`). Full backend suite was 65/68 at that point —
+the 3 errors were the `RouteMindApplicationTests` context-load failure
+because the `routemind_test` database did not exist in this VM. That
+environment gap was fixed during road routing (created the
+`routemind_test` database owned by `routemind`, pre-created the PostGIS
+extension as superuser); the full suite now passes 89/89. Frontend:
+16/16 tests pass, production build passes (pre-existing 500 kB
+bundle-budget warning unchanged).
 
 Remaining issues:
 
@@ -279,13 +282,69 @@ Remaining issues:
 - Writes still answer 401 until JWT login lands (HTTP Basic is
   disabled by design); test data can only be seeded directly in the
   database for now.
-- `RouteMindApplicationTests` still fails in this VM for the
-  pre-existing Java/Postgres socket reason; it needs a real database
-  (Docker or CI) to pass.
-
 ## Road routing
 
-Local OSRM road network, route geometry, travel time and distance matrix.
+Self-hosted OSRM (Florida extract) for real road routes on the fleet
+map, plus travel-time / distance matrix for the route optimization
+work that follows.
+
+Backend (`backend/src/main/java/com/routemind/routing/`):
+`OsrmClient` (route + table calls against any OSRM server, explicit
+longitude/latitude conversion, 2s connect / 5s read timeouts),
+`RoutingService` (validation: 2–25 waypoints, in-range coordinates;
+unreachable or non-`Ok` router answers become 503, never invented
+geometry), `RoutingController` (`POST /api/v1/routing/route`,
+`POST /api/v1/routing/matrix`, `GET /api/v1/routing/status`), and
+`RoutingProperties` (`routemind.routing`, overridable by environment).
+The OSRM client also answers proxy authentication challenges when
+`http.proxyUser` / `http.proxyPassword` (or the `https.*` variants) are
+set as JVM properties — needed only behind an authenticating proxy.
+
+Infra: compose service `osrm` (profile `routing`,
+`osrm/osrm-backend:v5.27.1`, `osrm-routed --algorithm mld`, port
+`${OSRM_PORT:-5000}`, read-only `./osrm-data` volume). Data setup is
+`./scripts/setup-osrm-data.sh` (Geofabrik Florida extract ~500 MB,
+`osrm-extract` / `osrm-partition` / `osrm-customize`, ~2 GB in
+`osrm-data/`, git-ignored); see `osrm-data/README.md`. Without the
+data or the profile the app still starts and the map falls back to
+straight lines.
+
+Frontend: `RoutingService` (`route` / `matrix` / `status`) and road
+geometry in `buildFleetMapView` — a vehicle with a road route gets its
+real road polyline with distance and driving time in the tooltip; a
+vehicle without one keeps the straight depot-to-stops line and is
+labelled as such. The map shows "Road routes are unavailable right
+now, so routes are drawn as direct lines" when a route request fails.
+
+Verified Nov 13, 2026: frontend production build passes (bundle
+unchanged, pre-existing 500 kB budget warning); frontend tests 22/22
+pass (routing service 3, road-route view 2, map fallback note 1, plus
+the previous 16); backend tests 89/89 pass, including 21 routing
+tests (`OsrmClientTest` 9, `RoutingControllerTest` 6,
+`RoutingServiceTest` 6) against a stub OSRM server on localhost. The
+OSRM request shape was checked against the real public demo server
+with curl: a Gainesville route returned 4,527.8 m in 380.9 s with real
+road geometry. Screenshot `work/screenshots/osrm-road-routing-map.png`
+shows the honest fallback state with the backend running (live
+`LIVE-001` at 40 km/h, dashed straight line depot → stop, fallback
+note visible; OSM tiles grey as before in headless Chrome).
+
+Not verified in this VM:
+
+- A real OSRM server has never served this app end to end here:
+  `docker compose up` is blocked, so the compose `osrm` service and
+  `setup-osrm-data.sh` have never run, and the Florida `.osrm` files
+  have never been built. On a normal machine:
+  `./scripts/setup-osrm-data.sh`, then
+  `docker compose --profile routing up --build`.
+- The backend JVM cannot reach any external host in this VM (the
+  sandbox answers its TCP connections with "Other TCP connections is
+  turned off"), so the live check above used curl, not the Java
+  client — the Java client against a real OSRM server is unproven
+  here, though its parsing is covered by the stub-server tests and
+  its request format matches the curl check. It will work on a normal
+  machine, where the backend talks to `http://osrm:5000` directly
+  with no egress proxy involved.
 
 ## Route optimization
 

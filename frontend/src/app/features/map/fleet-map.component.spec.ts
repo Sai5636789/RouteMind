@@ -9,6 +9,7 @@ import { Vehicle } from '../../core/models/vehicle';
 import { VehiclePosition } from '../../core/models/vehicle-position';
 import { DepotService } from '../../core/services/depot.service';
 import { OrderService } from '../../core/services/order.service';
+import { RoutingService } from '../../core/services/routing.service';
 import { TrackingService } from '../../core/services/tracking.service';
 import { VehicleService } from '../../core/services/vehicle.service';
 import { FleetMapComponent } from './fleet-map.component';
@@ -34,7 +35,7 @@ const pageOf = <T>(content: T[]): Paged<T> => ({
 describe('FleetMapComponent', () => {
   let fixture: ComponentFixture<FleetMapComponent>;
 
-  async function setup() {
+  async function setup(assigned = false) {
     const depots = jasmine.createSpyObj<DepotService>('DepotService', ['list']);
     depots.list.and.returnValue(of([depot]));
     const vehicles = jasmine.createSpyObj<VehicleService>('VehicleService', ['list']);
@@ -43,7 +44,7 @@ describe('FleetMapComponent', () => {
       plateNumber: 'ABC-123',
       model: 'Van',
       capacityKg: 500,
-      status: 'AVAILABLE',
+      status: assigned ? 'ON_ROUTE' : 'AVAILABLE',
       depotId: 'd1',
       createdAt: '2026-11-12T00:00:00Z',
       updatedAt: '2026-11-12T00:00:00Z',
@@ -57,13 +58,25 @@ describe('FleetMapComponent', () => {
       latitude: 29.7,
       longitude: -82.3,
       weightKg: 12,
-      status: 'CREATED',
-      assignedVehicleId: null,
-      assignedDriverId: null,
+      status: assigned ? 'ASSIGNED' : 'CREATED',
+      assignedVehicleId: assigned ? 'v1' : null,
+      assignedDriverId: assigned ? 'driver-1' : null,
       createdAt: '2026-11-12T00:00:00Z',
       updatedAt: '2026-11-12T00:00:00Z',
     };
     orders.list.and.returnValue(of(pageOf([order])));
+    const routing = jasmine.createSpyObj<RoutingService>('RoutingService', ['route', 'matrix', 'status']);
+    routing.route.and.returnValue(
+      of({
+        geometry: [
+          { latitude: 29.6516, longitude: -82.3248 },
+          { latitude: 29.66, longitude: -82.31 },
+          { latitude: 29.7, longitude: -82.3 },
+        ],
+        distanceMetres: 3053.2,
+        durationSeconds: 272.5,
+      }),
+    );
     const tracking = jasmine.createSpyObj<TrackingService>('TrackingService', [
       'latest',
       'connect',
@@ -89,11 +102,12 @@ describe('FleetMapComponent', () => {
         { provide: VehicleService, useValue: vehicles },
         { provide: OrderService, useValue: orders },
         { provide: TrackingService, useValue: tracking },
+        { provide: RoutingService, useValue: routing },
       ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(FleetMapComponent);
-    return { depots, vehicles, orders, tracking };
+    return { depots, vehicles, orders, tracking, routing };
   }
 
   it('renders the map, depot, vehicle and stop from the real APIs', fakeAsync(async () => {
@@ -120,6 +134,19 @@ describe('FleetMapComponent', () => {
 
     expect(tracking.latest).toHaveBeenCalled();
     expect(tracking.connect).toHaveBeenCalled();
+  }));
+
+  it('shows the fallback note when road routing fails', fakeAsync(async () => {
+    const { routing } = await setup(true);
+    routing.route.and.returnValue(throwError(() => new Error('router down')));
+    fixture.detectChanges();
+    tick();
+
+    expect((fixture.nativeElement.textContent as string)).toContain(
+      'Road routes are unavailable right now',
+    );
+    // The map still renders with the straight line.
+    expect(fixture.nativeElement.querySelector('.map')).not.toBeNull();
   }));
 
   it('shows the error state when the APIs do not answer', fakeAsync(async () => {

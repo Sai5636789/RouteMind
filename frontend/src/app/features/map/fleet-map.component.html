@@ -53,9 +53,16 @@
         }
       </p>
       <p>
-        Routes are drawn in creation order. Optimized routing arrives with
-        route optimization.
+        Routes follow real roads when the router is reachable; otherwise
+        they are drawn as direct lines in creation order. Optimized
+        routing arrives with route optimization.
       </p>
+      @if (roadRoutesUnavailable()) {
+        <p>
+          Road routes are unavailable right now, so routes are drawn as
+          direct lines. The map still shows live positions.
+        </p>
+      }
     </mat-card-content>
   </mat-card>
 

@@ -28,3 +28,9 @@ Thumbs.db
 
 # Docker
 .docker/
+
+# OSRM road-network data (built by scripts/setup-osrm-data.sh; ~2 GB).
+# The README in osrm-data/ is tracked; the data files are not.
+osrm-data/*.osm.pbf
+osrm-data/*.osrm
+osrm-data/*.osrm.*

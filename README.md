@@ -146,8 +146,10 @@ fleet on OpenStreetMap tiles:
   so no position is ever invented; a vehicle that cannot be placed is
   listed in the side panel instead of on the map.
 - **Routes** — a dashed polyline per vehicle, depot to its active
-  assigned stops in creation order. Optimized routing arrives with
-  route optimization.
+  assigned stops in creation order. When the road router is reachable
+  the line follows real roads (tooltip shows distance and driving
+  time); otherwise it is a direct line and the map says so (see Road
+  routing below). Optimized routing arrives with route optimization.
 - **Side panel** — depot, vehicles and stops; clicking one flies the
   map to it. An "Active orders only" filter hides delivered and
   cancelled stops.
@@ -171,6 +173,43 @@ Positions are only ever recorded for vehicles the simulator has
 actually moved; a vehicle with no tracked position is placed by the
 map's fallback rules, never invented. Delivery is not simulated — an
 order only changes status through the order lifecycle actions.
+
+## Road routing
+
+The fleet map draws real road routes from a self-hosted OSRM instance
+(OpenStreetMap data, Florida extract). The router is optional: the app
+starts and works without it, and everything degrades honestly.
+
+- **Data setup (once, on a machine with Docker):**
+  `./scripts/setup-osrm-data.sh` — downloads
+  `florida-latest.osm.pbf` from Geofabrik (~500 MB) and runs
+  `osrm-extract`, `osrm-partition` and `osrm-customize` into
+  `osrm-data/` (~2 GB, git-ignored). Then start the router with the
+  app: `docker compose --profile routing up --build`. It answers at
+  `http://localhost:5000` (or `${OSRM_PORT}`).
+- **Endpoints** (`backend/src/main/java/com/routemind/routing/`):
+  `POST /api/v1/routing/route` (road geometry through 2–25 waypoints),
+  `POST /api/v1/routing/matrix` (travel-time / distance matrix),
+  `GET /api/v1/routing/status` (whether the router answers).
+  When the router is disabled or unreachable, route and matrix answer
+  **503** with the router's address — no route or time is ever invented.
+- **Settings** (`application.yml`, overridable by environment):
+  `ROUTING_ENABLED` (default `true`), `OSRM_BASE_URL` (default
+  `http://osrm:5000`, the compose service name — set it to
+  `http://localhost:5000` when running without Docker),
+  `OSRM_PROFILE` (`driving`), connect/read timeouts (2s / 5s), max
+  25 waypoints. `ROUTING_ENABLED=false` disables the endpoints
+  entirely (503); the map then always draws direct lines.
+- **Proxies:** the OSRM client honours the JVM proxy settings
+  (`http.proxyHost` / `https.proxyHost`, `http.nonProxyHosts`) and, when
+  `http.proxyUser` / `http.proxyPassword` (or the `https.*` variants)
+  are set, answers the proxy's authentication challenge. This matters
+  only when the router is reached through an authenticating proxy;
+  the normal compose setup needs none of it.
+- **Without Docker:** point `OSRM_BASE_URL` at any reachable OSRM
+  server (for example the public demo server,
+  `https://router.project-osrm.org` — fine for a quick check, not a
+  dependency to rely on).
 
 Simulator settings (`application.yml`, overridable by environment):
 

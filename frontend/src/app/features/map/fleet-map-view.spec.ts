@@ -139,6 +139,51 @@ describe('buildFleetMapView', () => {
     ]);
   });
 
+  it('uses road geometry for a vehicle when the router supplied it', () => {
+    const onRoute = vehicle('v1', 'ABC-123', 'ON_ROUTE');
+    const stop = order('o1', 'Ana', 'ASSIGNED', 29.7, -82.3, 'v1');
+    const roadRoutes = new Map([
+      [
+        'v1',
+        {
+          points: [
+            [29.6516, -82.3248],
+            [29.66, -82.31],
+            [29.7, -82.3],
+          ] as [number, number][],
+          distanceMetres: 3053.2,
+          durationSeconds: 272.5,
+        },
+      ],
+    ]);
+
+    const view = buildFleetMapView([depot], [onRoute], [stop], new Map(), roadRoutes);
+
+    expect(view.routes.length).toBe(1);
+    expect(view.routes[0].source).toBe('road');
+    expect(view.routes[0].points).toEqual([
+      [29.6516, -82.3248],
+      [29.66, -82.31],
+      [29.7, -82.3],
+    ]);
+    expect(view.routes[0].distanceMetres).toBe(3053.2);
+    expect(view.routes[0].durationSeconds).toBe(272.5);
+  });
+
+  it('falls back to the straight line when no road route is available', () => {
+    const onRoute = vehicle('v1', 'ABC-123', 'ON_ROUTE');
+    const stop = order('o1', 'Ana', 'ASSIGNED', 29.7, -82.3, 'v1');
+
+    const view = buildFleetMapView([depot], [onRoute], [stop]);
+
+    expect(view.routes[0].source).toBe('straight');
+    expect(view.routes[0].points).toEqual([
+      [29.6516, -82.3248],
+      [29.7, -82.3],
+    ]);
+    expect(view.routes[0].distanceMetres).toBeUndefined();
+  });
+
   it('ignores live positions for vehicles that are not on the map', () => {
     const available = vehicle('v2', 'DEF-456', 'AVAILABLE');
     const positions = new Map([
