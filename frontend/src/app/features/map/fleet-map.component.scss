@@ -1,0 +1,122 @@
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.note-card {
+  margin-bottom: 16px;
+}
+
+.note-card p {
+  margin: 4px 0;
+}
+
+.map-toolbar {
+  margin-bottom: 12px;
+}
+
+.map-layout {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.map-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.map {
+  height: 560px;
+  width: 100%;
+  border-radius: 4px;
+  z-index: 0;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 12px 4px;
+  font-size: 14px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-marker {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+}
+
+.side-panel {
+  flex: 0 0 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 640px;
+  overflow-y: auto;
+}
+
+.panel-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 4px;
+  border: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.panel-row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.panel-row-title {
+  font-weight: 500;
+}
+
+.panel-row-sub {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.panel-note {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+@media (max-width: 900px) {
+  .map-layout {
+    flex-direction: column;
+  }
+
+  .side-panel {
+    flex-basis: auto;
+    max-height: none;
+  }
+
+  .map {
+    height: 420px;
+  }
+}

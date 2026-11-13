@@ -143,10 +143,73 @@ Remaining issues:
   lands. The dashboard is wired to the real APIs; it just cannot read
   them yet without auth.
 
-## Fleet map
+## Temporarily open reads + fleet map — completed Nov 12, 2026
 
-Leaflet + OpenStreetMap: map tiles, depot, vehicle and stop markers, route
-polyline.
+- Security: GET endpoints for vehicles, drivers, orders and depots are
+  temporarily public for the local demo only (Sai's choice). Every write
+  and lifecycle action (POST, PUT, PATCH, DELETE) still requires
+  authentication and answers 401. The exception is marked TEMPORARY in
+  `SecurityConfig` and must be removed when JWT login lands.
+- Depot read API: `GET /api/v1/depots` and `GET /api/v1/depots/{id}`,
+  read from the seeded PostGIS depot with plain SQL (`ST_X`/`ST_Y`),
+  so the map never hard-codes the depot location. No write endpoints.
+- Fleet map (`/map`, lazy-loaded so Leaflet stays out of the initial
+  bundle): OpenStreetMap tiles, depot marker, numbered delivery-stop
+  markers coloured by order status, vehicle markers, and a dashed
+  depot-to-stops polyline per vehicle. A side panel lists vehicles and
+  stops with click-to-focus; an "Active orders only" filter hides
+  delivered and cancelled stops.
+- Positioning is honest by construction (`buildFleetMapView`, unit
+  tested): a vehicle has no tracked position yet, so it is never placed
+  at an invented point — available vehicles are shown at their depot,
+  on-route vehicles at their next assigned stop, and a vehicle that
+  cannot be placed is listed separately. Routes join stops in creation
+  order and are labelled as such; optimized routing arrives with route
+  optimization.
+- Tests: 11 frontend unit tests pass (6 from earlier milestones, 3 for
+  the map positioning rules, 2 for the map component).
+
+Verification (Nov 12, 2026, in this sandbox):
+
+- Frontend production build: passed (`npm run build`, Angular 20;
+  only the pre-existing 500 kB bundle-budget warning). The first build
+  failed the 1 MB error budget after adding Leaflet, so the map route
+  is lazy-loaded and Leaflet is an allowed CommonJS dependency — the
+  initial bundle is back to 847 kB.
+- Frontend unit tests: 11 passed, 0 failed (Karma + headless
+  Chromium). The system Chrome binary refuses to start in this
+  sandbox ("Hatch WebGL domain policy is required"), so the tests run
+  with the Playwright Chromium binary instead.
+- NOT VERIFIED here: backend tests and the live stack. Java 21 and
+  Maven were installed in this session and Postgres + Redis were
+  started, but Maven cannot download dependencies here. The failure
+  was isolated, not hand-waved: curl, Java `HttpsURLConnection` and
+  the JDK `HttpClient` all reach Maven Central through the sandbox
+  egress proxy (HTTP 200, parent POM downloads fine), but Maven
+  itself fails — 3.8.7's Wagon transport ("server failed to respond
+  with a valid HTTP response") and 3.9.9's native transport
+  ("Connection reset"). Two sandbox traps were found and fixed along
+  the way and are worth knowing: (1) Maven reads user settings from
+  `/root/.m2/settings.xml` (JVM `user.home`) while the shell's
+  `~/.m2` is `/home/hatch/.m2` — the corrected settings (proxy, no
+  credentials, since the proxy accepts unauthenticated CONNECT) now
+  live in both places; (2) the proxy's CA bundle had to be split into
+  individual certificates and imported into a truststore
+  (`~/.m2/hatch-truststore.p12`). Neither fix made Maven download,
+  so the backend code for this milestone (SecurityConfig change,
+  depot read API) is uncompiled and untested here; it needs a normal
+  machine or Docker run. No fake database or fake service was used.
+  The sandbox-only fixes above (settings, truststore, Maven 3.9.9
+  in `/tmp`) are not part of the repo.
+- NOT VERIFIED here: `docker compose up` and Docker image builds (same
+  sandbox container restriction as before).
+
+Remaining issues:
+
+- Authentication (JWT login) still to be added; when it lands, the
+  temporary public reads must be removed.
+- The fleet map shows real data only once the backend runs; until
+  then it shows the honest "Backend unreachable" state.
 
 ## Real-time tracking
 

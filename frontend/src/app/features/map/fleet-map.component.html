@@ -1,0 +1,142 @@
+<div class="page-header">
+  <h1 class="page-title">Fleet map</h1>
+  <button mat-raised-button color="primary" (click)="load()">
+    <mat-icon>refresh</mat-icon>
+    Refresh
+  </button>
+</div>
+
+@if (state() === 'loading') {
+  <div class="loading">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Loading fleet map…</p>
+  </div>
+} @else if (state() === 'error') {
+  <mat-card class="error-card">
+    <mat-card-header>
+      <mat-card-title>Could not load the fleet map</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <p>{{ error() }}</p>
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-raised-button color="primary" (click)="load()">Retry</button>
+    </mat-card-actions>
+  </mat-card>
+} @else if (!view().center) {
+  <mat-card class="empty-card">
+    <mat-card-content>
+      <p>No locations to show yet. Add a depot or an order and the map will appear here.</p>
+    </mat-card-content>
+  </mat-card>
+} @else {
+  <mat-card class="note-card">
+    <mat-card-content>
+      <p>
+        Vehicle positions are not tracked live yet — available vehicles are
+        shown at their depot, and on-route vehicles at their next stop.
+        Live positions arrive with real-time tracking.
+      </p>
+      <p>
+        Routes are drawn in creation order. Optimized routing arrives with
+        route optimization.
+      </p>
+    </mat-card-content>
+  </mat-card>
+
+  <div class="map-toolbar">
+    <mat-checkbox [checked]="activeOnly()" (change)="onActiveOnlyChange($event.checked)">
+      Active orders only
+    </mat-checkbox>
+  </div>
+
+  <div class="map-layout">
+    <div class="map-wrap">
+      <div #map class="map" aria-label="Fleet map"></div>
+      <div class="legend">
+        <span class="legend-item">
+          <span class="map-marker depot-marker legend-marker">
+            <span class="material-symbols-outlined">home</span>
+          </span>
+          Depot
+        </span>
+        <span class="legend-item">
+          <span class="map-marker vehicle-marker legend-marker">
+            <span class="material-symbols-outlined">local_shipping</span>
+          </span>
+          Vehicle
+        </span>
+        <span class="legend-item">
+          <span class="map-marker stop-marker legend-marker" style="--stop-color: #1e88e5">1</span>
+          Delivery stop
+        </span>
+      </div>
+    </div>
+
+    <aside class="side-panel">
+      @if (view().depot) {
+        <mat-card class="panel-card">
+          <mat-card-header>
+            <mat-card-title>{{ view().depot!.name }}</mat-card-title>
+            <mat-card-subtitle>{{ view().depot!.address }}</mat-card-subtitle>
+          </mat-card-header>
+        </mat-card>
+      }
+
+      <mat-card class="panel-card">
+        <mat-card-header>
+          <mat-card-title>Vehicles ({{ view().vehicles.length }})</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          @if (view().vehicles.length === 0) {
+            <p>No vehicles on the map yet.</p>
+          }
+          @for (marker of view().vehicles; track marker.vehicle.id) {
+            <button
+              class="panel-row"
+              type="button"
+              (click)="focusVehicle(marker)"
+              [attr.aria-label]="'Show vehicle ' + marker.vehicle.plateNumber + ' on the map'"
+            >
+              <span class="panel-row-title">{{ marker.vehicle.plateNumber }}</span>
+              <span class="panel-row-sub">
+                {{ marker.vehicle.model }} · {{ marker.vehicle.status }}
+              </span>
+              <span class="panel-row-sub">{{ vehiclePlacementNote(marker) }}</span>
+            </button>
+          }
+          @if (view().vehiclesWithoutPosition.length > 0) {
+            <p class="panel-note">
+              {{ view().vehiclesWithoutPosition.length }} vehicle(s) have no
+              position to show yet — no depot and no assigned stop.
+            </p>
+          }
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="panel-card">
+        <mat-card-header>
+          <mat-card-title>Stops ({{ view().stops.length }})</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          @if (view().stops.length === 0) {
+            <p>No delivery stops to show.</p>
+          }
+          @for (stop of view().stops; track stop.order.id) {
+            <button
+              class="panel-row"
+              type="button"
+              (click)="focusStop(stop.order)"
+              [attr.aria-label]="'Show stop for ' + stop.order.customerName + ' on the map'"
+            >
+              <span class="panel-row-title">#{{ stop.index }} {{ stop.order.customerName }}</span>
+              <span class="panel-row-sub">
+                {{ stop.order.deliveryAddress }} · {{ stop.order.status }}
+              </span>
+            </button>
+          }
+        </mat-card-content>
+      </mat-card>
+    </aside>
+  </div>
+}

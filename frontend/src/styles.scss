@@ -26,3 +26,42 @@ body {
   background: #f5f5f5;
   color: rgba(0, 0, 0, 0.87);
 }
+
+// Fleet map markers. These styles must live here, not in the map
+// component's stylesheet: Leaflet injects the marker HTML into the map
+// pane at runtime, outside Angular's emulated view encapsulation, so
+// component-scoped styles never reach it. Markers are divIcons, not
+// image files, so there is no default-icon path to break under the
+// bundler.
+.map-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.map-marker .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.depot-marker {
+  background: #1565c0;
+  width: 36px;
+  height: 36px;
+}
+
+.vehicle-marker {
+  background: #37474f;
+  width: 36px;
+  height: 36px;
+}
+
+.stop-marker {
+  background: var(--stop-color, #78909c);
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  font-weight: 600;
+}

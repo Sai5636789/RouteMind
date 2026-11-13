@@ -67,8 +67,11 @@ error shape), `config`, then `fleet`, `orders`, `tracking`, `dispatch`,
 
 ## API
 
-All endpoints except health require authentication. The token mechanism lands
-with the authentication feature; until then protected endpoints answer 401.
+TEMPORARY, local-demo only: read (GET) endpoints are public so the
+dashboard and fleet map can load data before authentication lands.
+Every write and lifecycle action still requires authentication; the
+token mechanism lands with the authentication feature, and when it
+does, the temporary public reads must be removed (see `SecurityConfig`).
 List endpoints are paginated (`?page=0&size=20&sort=createdAt,desc`) and
 return `{content, page, size, totalElements, totalPages}`. Errors always use
 one shape: `{timestamp, status, error, message, path}`.
@@ -77,6 +80,8 @@ one shape: `{timestamp, status, error, message, path}`.
 | --- | --- |
 | `GET /api/v1/health` | Public liveness probe, `{"status":"UP",...}` |
 | `GET /actuator/health` | Dependency health (Postgres, Redis) |
+| `GET /api/v1/depots` | List depots (seeded by Flyway) |
+| `GET /api/v1/depots/{id}` | Get one depot |
 | `GET /api/v1/vehicles?status=` | List vehicles, optionally filtered by status |
 | `GET /api/v1/vehicles/{id}` | Get one vehicle |
 | `POST /api/v1/vehicles` | Register a vehicle (201) |
@@ -125,6 +130,26 @@ http://localhost:4200:
 Every page has honest loading, empty, and error states. If the API
 cannot be reached, or answers 401 because authentication has not landed
 yet, the page says so and offers a retry — it never shows invented data.
+
+## Fleet map
+
+The map at http://localhost:4200/map (sidebar: Fleet map) shows the
+fleet on OpenStreetMap tiles:
+
+- **Depot** — the seeded depot's real location from the depot API.
+- **Delivery stops** — one numbered marker per order, coloured by
+  status; click for customer, address, status and assigned vehicle.
+- **Vehicles** — available vehicles are shown at their depot and
+  on-route vehicles at their next assigned stop. Vehicle positions are
+  not tracked live yet (that arrives with real-time tracking), so no
+  position is ever invented; a vehicle that cannot be placed is listed
+  in the side panel instead of on the map.
+- **Routes** — a dashed polyline per vehicle, depot to its active
+  assigned stops in creation order. Optimized routing arrives with
+  route optimization.
+- **Side panel** — depot, vehicles and stops; clicking one flies the
+  map to it. An "Active orders only" filter hides delivered and
+  cancelled stops.
 
 ## Development plan
 
