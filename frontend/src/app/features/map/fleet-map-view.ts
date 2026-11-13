@@ -16,8 +16,11 @@ import { VehiclePosition } from '../../core/models/vehicle-position';
  *   point: an available, maintenance or out-of-service vehicle is shown
  *   at its depot — where a parked vehicle is — and an on-route vehicle
  *   is shown at its next assigned stop, labelled as heading there. A
- *   vehicle that cannot be placed at all is listed separately, never
- *   guessed.
+ *   broken-down vehicle is not shown at the depot: it broke down
+ *   somewhere on its route, not at the depot, and its last known
+ *   position was cleared when the breakdown was reported, so it is
+ *   listed separately instead of being placed. A vehicle that cannot be
+ *   placed at all is listed separately, never guessed.
  * - A route polyline joins the depot to a vehicle's active assigned
  *   stops in creation order. When a road route is available for the
  *   vehicle (see {@link RoadRouteGeometry}), the polyline follows the
@@ -217,7 +220,12 @@ export function buildFleetMapView(
       return;
     }
 
-    // No active assigned orders: the vehicle is parked at its depot.
+    // No active assigned orders: the vehicle is parked at its depot —
+    // unless it broke down, in which case its depot is not where it is.
+    if (vehicle.status === 'BROKEN_DOWN') {
+      withoutPosition.push(vehicle);
+      return;
+    }
     if (depotPosition) {
       const [dLat, dLng] = depotOffset(depotPlaced++);
       markers.push({

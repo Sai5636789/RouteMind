@@ -382,6 +382,7 @@ export class FleetMapComponent implements OnInit, OnDestroy {
         `<strong>#${stop.index} ${escapeHtml(stop.order.customerName)}</strong><br>` +
           `${escapeHtml(stop.order.deliveryAddress)}<br>` +
           `Status: ${escapeHtml(stop.order.status)} · ${stop.order.weightKg} kg` +
+          (stop.order.needsReassignment ? '<br>Needs reassignment after a breakdown' : '') +
           (stop.order.assignedVehicleId
             ? `<br>Vehicle: ${escapeHtml(this.plateFor(stop.order.assignedVehicleId))}`
             : ''),

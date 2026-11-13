@@ -62,6 +62,7 @@ describe('FleetMapComponent', () => {
       status: assigned ? 'ASSIGNED' : 'CREATED',
       assignedVehicleId: assigned ? 'v1' : null,
       assignedDriverId: assigned ? 'driver-1' : null,
+      needsReassignment: false,
       createdAt: '2026-11-12T00:00:00Z',
       updatedAt: '2026-11-12T00:00:00Z',
     };

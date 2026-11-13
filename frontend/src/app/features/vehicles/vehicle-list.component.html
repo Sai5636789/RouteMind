@@ -16,6 +16,83 @@
   </mat-select>
 </mat-form-field>
 
+@if (openIncidents().length > 0) {
+  <mat-card class="incident-card">
+    <mat-card-header>
+      <mat-card-title>Open breakdowns ({{ openIncidents().length }})</mat-card-title>
+      <mat-card-subtitle>
+        Affected orders are unassigned and flagged for reassignment. Reroute
+        runs the optimizer over those orders and the vehicles available now.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      @for (incident of openIncidents(); track incident.id) {
+        <div class="incident-row">
+          <span class="incident-title">{{ incident.vehiclePlateNumber }}</span>
+          <span class="incident-detail">
+            {{ incident.reason ?? 'No reason given' }} ·
+            {{ reportedAt(incident) }}
+          </span>
+          <span class="incident-detail">
+            {{ incident.affectedOrders.length }} affected order(s):
+            @for (affected of incident.affectedOrders; track affected.orderId; let last = $last) {
+              {{ affected.customerName ?? affected.orderId }} (was {{ affected.previousStatus }})
+              @if (affected.reassignedVehicleId) {
+                — rerouted
+              }
+              @if (!last) {
+                ,
+              }
+            }
+          </span>
+          <button
+            mat-raised-button
+            color="primary"
+            (click)="reroute(incident)"
+            [disabled]="reroutingId() === incident.id"
+          >
+            {{ reroutingId() === incident.id ? 'Rerouting…' : 'Reroute orders' }}
+          </button>
+          <button
+            mat-button
+            (click)="resolve(incident)"
+            [disabled]="resolvingId() === incident.id"
+          >
+            {{ resolvingId() === incident.id ? 'Resolving…' : 'Resolve' }}
+          </button>
+          @if (rerouteResult(incident); as result) {
+            <p
+              class="reroute-summary"
+              [class.reroute-waiting]="result.stillWaitingOrderIds.length > 0"
+            >
+              Rerouted {{ result.assignments.length }} order(s):
+              @for (assignment of result.assignments; track assignment.orderId; let last = $last) {
+                {{ assignment.customerName }} → {{ assignment.plateNumber }}@if (!last) {
+                  ,
+                }
+              }
+              @if (result.assignments.length === 0) {
+                none —
+              }
+              {{ formatKm(result.optimization.totalDistanceMetres) }} ·
+              {{ formatMinutes(result.optimization.totalDurationSeconds) }} ·
+              @if (result.matrixSource === 'OSRM') {
+                real road times.
+              } @else {
+                straight-line distances — treat the times as estimates.
+              }
+              @if (result.stillWaitingOrderIds.length > 0) {
+                {{ result.stillWaitingOrderIds.length }} order(s) could not be
+                placed and are still flagged for reassignment.
+              }
+            </p>
+          }
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+}
+
 @if (state() === 'loading') {
   <div class="loading">
     <mat-spinner diameter="40"></mat-spinner>
@@ -69,6 +146,7 @@
             [class.status-on_route]="v.status === 'ON_ROUTE'"
             [class.status-maintenance]="v.status === 'MAINTENANCE'"
             [class.status-out_of_service]="v.status === 'OUT_OF_SERVICE'"
+            [class.status-broken_down]="v.status === 'BROKEN_DOWN'"
           >
             {{ v.status }}
           </span>
@@ -77,6 +155,16 @@
       <ng-container matColumnDef="actions">
         <th mat-header-cell *matHeaderCellDef></th>
         <td mat-cell *matCellDef="let v" class="actions">
+          @if (canBreakDown(v)) {
+            <button
+              mat-icon-button
+              (click)="reportBreakdown(v)"
+              aria-label="Report breakdown"
+              title="Report breakdown"
+            >
+              <mat-icon>car_crash</mat-icon>
+            </button>
+          }
           <button mat-icon-button (click)="edit(v)" aria-label="Edit vehicle">
             <mat-icon>edit</mat-icon>
           </button>

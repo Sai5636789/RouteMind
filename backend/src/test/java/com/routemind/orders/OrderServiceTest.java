@@ -131,6 +131,33 @@ class OrderServiceTest {
     }
 
     @Test
+    void assignClearsNeedsReassignmentFlag() {
+        order.setNeedsReassignment(true);
+        stubSave();
+        stubOrderLookup();
+        when(vehicles.findById(any())).thenReturn(Optional.of(vehicle));
+        when(drivers.findById(any())).thenReturn(Optional.of(driver));
+
+        Order assigned = service.assign(orderId, UUID.randomUUID(), UUID.randomUUID());
+
+        assertThat(assigned.getStatus()).isEqualTo(OrderStatus.ASSIGNED);
+        assertThat(assigned.isNeedsReassignment()).isFalse();
+    }
+
+    @Test
+    void cancelClearsNeedsReassignmentFlag() {
+        // A flagged order cancelled before any reroute is no longer waiting.
+        order.setNeedsReassignment(true);
+        stubSave();
+        stubOrderLookup();
+
+        Order cancelled = service.cancel(orderId);
+
+        assertThat(cancelled.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(cancelled.isNeedsReassignment()).isFalse();
+    }
+
+    @Test
     void deliverFromCreatedThrowsConflict() {
         stubOrderLookup();
 

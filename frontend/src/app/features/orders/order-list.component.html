@@ -73,6 +73,9 @@
           >
             {{ o.status }}
           </span>
+          @if (o.needsReassignment) {
+            <span class="status-pill status-reassignment">Needs reassignment</span>
+          }
         </td>
       </ng-container>
       <ng-container matColumnDef="actions">

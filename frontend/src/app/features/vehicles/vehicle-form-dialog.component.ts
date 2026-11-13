@@ -6,7 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import {
-  VEHICLE_STATUSES,
+  EDITABLE_VEHICLE_STATUSES,
   Vehicle,
   VehicleCreate,
   VehicleUpdate,
@@ -35,7 +35,7 @@ export class VehicleFormDialogComponent {
   private readonly dialogRef = inject(MatDialogRef<VehicleFormDialogComponent>);
   private readonly fb = inject(FormBuilder);
 
-  protected readonly statuses = VEHICLE_STATUSES;
+  protected readonly statuses = EDITABLE_VEHICLE_STATUSES;
   protected readonly isEdit = !!this.data.vehicle;
   protected readonly form = this.fb.group({
     plateNumber: [

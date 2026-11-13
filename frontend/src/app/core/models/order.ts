@@ -10,6 +10,8 @@ export interface Order {
   status: OrderStatus;
   assignedVehicleId: string | null;
   assignedDriverId: string | null;
+  /** True while the order waits for a new vehicle after a breakdown took its previous one. */
+  needsReassignment: boolean;
   createdAt: string;
   updatedAt: string;
 }

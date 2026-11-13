@@ -46,6 +46,7 @@ const order = (
   status,
   assignedVehicleId: vehicleId,
   assignedDriverId: vehicleId ? 'driver-1' : null,
+  needsReassignment: false,
   createdAt,
   updatedAt: '2026-11-12T00:00:00Z',
 });
@@ -232,6 +233,23 @@ describe('buildFleetMapView', () => {
       [29.68, -82.3],
     ]);
     expect(view.routes[0].optimized).toBeTrue();
+  });
+
+  it('lists a broken-down vehicle separately instead of parking it at the depot', () => {
+    const broken = vehicle('v1', 'ABC-123', 'BROKEN_DOWN');
+    const available = vehicle('v2', 'DEF-456', 'AVAILABLE');
+    // The breakdown unassigned its order, which is now flagged and waiting.
+    const flagged = {
+      ...order('o1', 'Ana', 'CREATED', 29.7, -82.3, null),
+      needsReassignment: true,
+    };
+
+    const view = buildFleetMapView([depot], [broken, available], [flagged]);
+
+    expect(view.vehicles.map((marker) => marker.vehicle.id)).toEqual(['v2']);
+    expect(view.vehiclesWithoutPosition.map((v) => v.id)).toEqual(['v1']);
+    expect(view.routes).toEqual([]);
+    expect(view.stops[0].order.needsReassignment).toBeTrue();
   });
 
   it('keeps creation order for vehicles with no optimized plan', () => {

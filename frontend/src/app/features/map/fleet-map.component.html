@@ -37,18 +37,21 @@
           @case ('live') {
             Vehicle markers move live as new positions arrive. A vehicle
             with no tracked position yet is shown at its next assigned stop
-            while on route, or at the depot while parked.
+            while on route, or at the depot while parked. A broken-down
+            vehicle is not shown at the depot — it broke down on its route.
           }
           @case ('polling') {
             Live updates are unavailable right now, so the map shows the
             latest snapshot and refreshes it every 10 seconds. A vehicle
             with no tracked position yet is shown at its next assigned stop
-            while on route, or at the depot while parked.
+            while on route, or at the depot while parked. A broken-down
+            vehicle is not shown at the depot — it broke down on its route.
           }
           @default {
             Live tracking is not connected. Vehicle markers show the latest
             known placement: an on-route vehicle at its next assigned stop,
-            a parked vehicle at the depot.
+            a parked vehicle at the depot. A broken-down vehicle is not
+            shown at the depot — it broke down on its route.
           }
         }
       </p>
@@ -231,9 +234,18 @@
           }
           @if (view().vehiclesWithoutPosition.length > 0) {
             <p class="panel-note">
-              {{ view().vehiclesWithoutPosition.length }} vehicle(s) have no
-              position to show yet — no depot and no assigned stop.
+              Not on the map — no position to show:
             </p>
+            @for (vehicle of view().vehiclesWithoutPosition; track vehicle.id) {
+              <p class="panel-row-sub">
+                {{ vehicle.plateNumber }} · {{ vehicle.model }} ·
+                {{ vehicle.status }}
+                @if (vehicle.status === 'BROKEN_DOWN') {
+                  — broke down away from the depot; its last known
+                  position was cleared when the breakdown was reported.
+                }
+              </p>
+            }
           }
         </mat-card-content>
       </mat-card>

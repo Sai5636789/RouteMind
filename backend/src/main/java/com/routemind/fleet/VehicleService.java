@@ -44,6 +44,14 @@ public class VehicleService {
     public Vehicle update(UUID id, String plateNumber, String model, java.math.BigDecimal capacityKg,
             VehicleStatus status, UUID depotId) {
         Vehicle vehicle = get(id);
+        if (status == VehicleStatus.BROKEN_DOWN) {
+            throw new ConflictException("Vehicle " + id
+                    + " cannot be marked broken down here; report a breakdown through POST /api/v1/incidents");
+        }
+        if (vehicle.getStatus() == VehicleStatus.BROKEN_DOWN) {
+            throw new ConflictException("Vehicle " + id
+                    + " is broken down and cannot be edited until its open incident is resolved");
+        }
         String normalizedPlate = plateNumber.trim().toUpperCase();
         if (!vehicle.getPlateNumber().equals(normalizedPlate) && vehicles.existsByPlateNumber(normalizedPlate)) {
             throw new ConflictException("A vehicle with plate number " + normalizedPlate + " already exists");
@@ -59,6 +67,14 @@ public class VehicleService {
     @Transactional
     public Vehicle changeStatus(UUID id, VehicleStatus status) {
         Vehicle vehicle = get(id);
+        if (status == VehicleStatus.BROKEN_DOWN) {
+            throw new ConflictException("Vehicle " + id
+                    + " cannot be marked broken down here; report a breakdown through POST /api/v1/incidents");
+        }
+        if (vehicle.getStatus() == VehicleStatus.BROKEN_DOWN) {
+            throw new ConflictException("Vehicle " + id
+                    + " is broken down and cannot change status until its open incident is resolved");
+        }
         if (vehicle.getStatus() == VehicleStatus.ON_ROUTE && status != VehicleStatus.ON_ROUTE) {
             throw new ConflictException("Vehicle " + id + " is on a route and cannot change status until it returns");
         }

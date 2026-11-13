@@ -69,6 +69,12 @@ public class GpsSimulator {
         this.clock = clock;
     }
 
+    /** Drops a vehicle's in-progress simulated route, so a vehicle taken out of service mid-route never resumes from stale state if it returns. */
+    public void clearRoute(UUID vehicleId) {
+        routes.remove(vehicleId);
+        settled.remove(vehicleId);
+    }
+
     @Scheduled(fixedDelayString = "${routemind.tracking.tick-millis:5000}")
     public void tick() {
         if (!properties.enabled()) {
