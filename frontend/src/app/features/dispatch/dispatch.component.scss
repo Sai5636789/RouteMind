@@ -1,0 +1,82 @@
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-title {
+  margin: 0;
+}
+
+.page-note {
+  color: rgba(0, 0, 0, 0.6);
+  margin: 8px 0 16px;
+}
+
+.filter {
+  min-width: 220px;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+}
+
+.inline-error {
+  color: #b3261e;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.plan-card,
+.driver-card {
+  margin-top: 24px;
+}
+
+.route {
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  padding: 12px 0;
+}
+
+.route h3 {
+  margin: 0 0 8px;
+}
+
+.driver-select {
+  min-width: 260px;
+}
+
+.driver-line {
+  margin: 0 0 8px;
+}
+
+.stops {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.stops li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.stop-customer {
+  font-weight: 500;
+}
+
+.stop-address {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.error-card,
+.empty-card {
+  margin-top: 16px;
+}

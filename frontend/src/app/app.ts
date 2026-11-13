@@ -43,6 +43,7 @@ export class App {
     { path: '/vehicles', label: 'Vehicles', icon: 'local_shipping' },
     { path: '/drivers', label: 'Drivers', icon: 'person' },
     { path: '/orders', label: 'Orders', icon: 'assignment' },
+    { path: '/dispatch', label: 'Dispatch', icon: 'route' },
     { path: '/map', label: 'Fleet map', icon: 'map' },
   ];
 
