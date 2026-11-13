@@ -54,8 +54,8 @@
       </p>
       <p>
         Routes follow real roads when the router is reachable; otherwise
-        they are drawn as direct lines in creation order. Optimized
-        routing arrives with route optimization.
+        they are drawn as direct lines. Run optimization below to reorder
+        the stops into the shortest capacity-respecting routes.
       </p>
       @if (roadRoutesUnavailable()) {
         <p>
@@ -70,6 +70,13 @@
     <mat-checkbox [checked]="activeOnly()" (change)="onActiveOnlyChange($event.checked)">
       Active orders only
     </mat-checkbox>
+    <button mat-raised-button color="primary" (click)="optimize()" [disabled]="optimizing()">
+      <mat-icon>route</mat-icon>
+      {{ optimizing() ? 'Optimizing…' : 'Optimize routes' }}
+    </button>
+    @if (optimizationResult()) {
+      <button mat-button (click)="clearOptimization()">Clear optimized plan</button>
+    }
     <span
       class="tracking-status"
       [class.live]="connection() === 'live'"
@@ -95,6 +102,77 @@
       }
     </span>
   </div>
+
+  @if (optimizationError()) {
+    <mat-card class="error-card">
+      <mat-card-content>
+        <p>Optimization failed: {{ optimizationError() }}</p>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (optimizationResult()) {
+    <mat-card class="note-card">
+      <mat-card-header>
+        <mat-card-title>Optimized routes</mat-card-title>
+        <mat-card-subtitle>
+          @if (optimizationResult()!.optimized.matrixSource === 'OSRM') {
+            Based on real road times from the router.
+          } @else {
+            Road times were unavailable, so this plan uses straight-line
+            distances — treat the times as estimates.
+          }
+          Solved in {{ optimizationResult()!.optimized.solveTimeMillis }} ms.
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p>
+          Optimized: {{ formatKm(optimizationResult()!.optimized.totalDistanceMetres) }} ·
+          {{ formatMinutes(optimizationResult()!.optimized.totalDurationSeconds) }} ·
+          {{ optimizationResult()!.optimized.totalWeightKg }} kg across
+          {{ optimizationResult()!.optimized.routes.length }} vehicle(s).
+          Creation order would take
+          {{ formatKm(optimizationResult()!.baseline.totalDistanceMetres) }} ·
+          {{ formatMinutes(optimizationResult()!.baseline.totalDurationSeconds) }}.
+          @if (optimizationResult()!.savedDistanceMetres > 0) {
+            Optimization saves {{ formatKm(optimizationResult()!.savedDistanceMetres) }} and
+            {{ formatMinutes(optimizationResult()!.savedDurationSeconds) }}.
+          } @else {
+            The creation order was already as short as the optimized plan.
+          }
+        </p>
+        @for (route of optimizationResult()!.optimized.routes; track route.vehicleId) {
+          <p>
+            <strong>{{ route.plateNumber }}</strong> ·
+            {{ route.orderIds.length }} stop(s) ·
+            {{ formatKm(route.totalDistanceMetres) }} ·
+            {{ formatMinutes(route.totalDurationSeconds) }} ·
+            {{ route.totalWeightKg }} kg
+            @if (route.orderIds.length > 0) {
+              — @for (orderId of route.orderIds; track orderId; let last = $last) {
+                {{ orderName(orderId) }}@if (!last) { → }
+              }
+            }
+          </p>
+        }
+        @if (optimizationResult()!.optimized.unassignedOrderIds.length > 0) {
+          <p>
+            Could not place
+            {{ optimizationResult()!.optimized.unassignedOrderIds.length }} order(s) — no
+            vehicle has room for them:
+            @for (orderId of optimizationResult()!.optimized.unassignedOrderIds; track orderId; let last = $last) {
+              {{ orderName(orderId) }}@if (!last) {, }
+            }
+          </p>
+        }
+        <p class="panel-note">
+          This is a plan, not an assignment — no orders were assigned by
+          running it. Assign orders from the Orders page when the plan
+          looks right.
+        </p>
+      </mat-card-content>
+    </mat-card>
+  }
 
   <div class="map-layout">
     <div class="map-wrap">

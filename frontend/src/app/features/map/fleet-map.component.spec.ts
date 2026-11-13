@@ -8,6 +8,7 @@ import { Paged } from '../../core/models/paged';
 import { Vehicle } from '../../core/models/vehicle';
 import { VehiclePosition } from '../../core/models/vehicle-position';
 import { DepotService } from '../../core/services/depot.service';
+import { OptimizationService } from '../../core/services/optimization.service';
 import { OrderService } from '../../core/services/order.service';
 import { RoutingService } from '../../core/services/routing.service';
 import { TrackingService } from '../../core/services/tracking.service';
@@ -91,6 +92,54 @@ describe('FleetMapComponent', () => {
       connection$: of('offline'),
     });
     tracking.latest.and.returnValue(of([]));
+    const optimization = jasmine.createSpyObj<OptimizationService>('OptimizationService', [
+      'optimizeCurrent',
+      'compareCurrent',
+    ]);
+    optimization.compareCurrent.and.returnValue(
+      of({
+        optimized: {
+          matrixSource: 'STRAIGHT_LINE',
+          solverStatus: 'OPTIMAL_OR_IMPROVED',
+          solveTimeMillis: 120,
+          routes: [
+            {
+              vehicleId: 'v1',
+              plateNumber: 'ABC-123',
+              orderIds: ['o1'],
+              totalDistanceMetres: 4200,
+              totalDurationSeconds: 378,
+              totalWeightKg: 12,
+            },
+          ],
+          unassignedOrderIds: [],
+          totalDistanceMetres: 4200,
+          totalDurationSeconds: 378,
+          totalWeightKg: 12,
+        },
+        baseline: {
+          matrixSource: 'STRAIGHT_LINE',
+          solverStatus: 'BASELINE_CREATION_ORDER',
+          solveTimeMillis: 0,
+          routes: [
+            {
+              vehicleId: 'v1',
+              plateNumber: 'ABC-123',
+              orderIds: ['o1'],
+              totalDistanceMetres: 4700,
+              totalDurationSeconds: 423,
+              totalWeightKg: 12,
+            },
+          ],
+          unassignedOrderIds: [],
+          totalDistanceMetres: 4700,
+          totalDurationSeconds: 423,
+          totalWeightKg: 12,
+        },
+        savedDistanceMetres: 500,
+        savedDurationSeconds: 45,
+      }),
+    );
 
     await TestBed.configureTestingModule({
       imports: [FleetMapComponent],
@@ -103,11 +152,12 @@ describe('FleetMapComponent', () => {
         { provide: OrderService, useValue: orders },
         { provide: TrackingService, useValue: tracking },
         { provide: RoutingService, useValue: routing },
+        { provide: OptimizationService, useValue: optimization },
       ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(FleetMapComponent);
-    return { depots, vehicles, orders, tracking, routing };
+    return { depots, vehicles, orders, tracking, routing, optimization };
   }
 
   it('renders the map, depot, vehicle and stop from the real APIs', fakeAsync(async () => {
@@ -158,5 +208,46 @@ describe('FleetMapComponent', () => {
     tick();
 
     expect((fixture.nativeElement.textContent as string)).toContain('Could not load the fleet map');
+  }));
+
+  it('runs optimization and shows the savings and the optimized plan', fakeAsync(async () => {
+    const { optimization } = await setup();
+    fixture.detectChanges();
+    tick();
+
+    const button = [...fixture.nativeElement.querySelectorAll('button')].find((b: HTMLButtonElement) =>
+      b.textContent?.includes('Optimize routes'),
+    ) as HTMLButtonElement;
+    expect(button).not.toBeUndefined();
+    button.click();
+    fixture.detectChanges();
+    tick();
+
+    expect(optimization.compareCurrent).toHaveBeenCalled();
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Optimized routes');
+    expect(text).toContain('Optimization saves 0.5 km');
+    expect(text).toContain('ABC-123');
+    expect(text).toContain('straight-line distances');
+    expect(text).toContain('This is a plan, not an assignment');
+  }));
+
+  it('shows the optimization error and keeps the map when optimization fails', fakeAsync(async () => {
+    const { optimization } = await setup();
+    optimization.compareCurrent.and.returnValue(throwError(() => new Error('solver down')));
+    fixture.detectChanges();
+    tick();
+
+    const button = [...fixture.nativeElement.querySelectorAll('button')].find((b: HTMLButtonElement) =>
+      b.textContent?.includes('Optimize routes'),
+    ) as HTMLButtonElement;
+    button.click();
+    fixture.detectChanges();
+    tick();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Optimization failed');
+    expect(text).not.toContain('Optimized routes');
+    expect(fixture.nativeElement.querySelector('.map')).not.toBeNull();
   }));
 });

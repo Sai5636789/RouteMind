@@ -22,9 +22,10 @@ import { VehiclePosition } from '../../core/models/vehicle-position';
  *   stops in creation order. When a road route is available for the
  *   vehicle (see {@link RoadRouteGeometry}), the polyline follows the
  *   road geometry instead of the straight line; otherwise it is the
- *   straight depot-to-stops line, labelled as such. It is a sequence,
- *   not an optimized route: optimized routing arrives with route
- *   optimization.
+ *   straight depot-to-stops line, labelled as such. When an optimized
+ *   stop order is supplied (see {@link buildFleetMapView}), a vehicle's
+ *   stops follow the optimized order instead of creation order — the
+ *   route is then an optimized route, not a sequence in creation order.
  */
 
 export type LatLng = [number, number];
@@ -71,6 +72,8 @@ export interface MapRoute {
   /** Present only for road routes: the router's own estimates. */
   distanceMetres?: number;
   durationSeconds?: number;
+  /** True when the stops follow an optimized order, not creation order. */
+  optimized?: boolean;
 }
 
 /** Road geometry for one vehicle, from the routing API. */
@@ -112,6 +115,14 @@ export function buildFleetMapView(
   orders: Order[],
   positions: ReadonlyMap<string, VehiclePosition> = new Map(),
   roadRoutes: ReadonlyMap<string, RoadRouteGeometry> = new Map(),
+  /**
+   * Optimized stop order per vehicle (vehicle id -> order ids in visit
+   * order, from the optimization API). A vehicle listed here has its
+   * stops — and its route — in that order; orders missing from the list
+   * keep creation order after the listed ones. A vehicle not listed
+   * keeps creation order throughout.
+   */
+  optimizedStopOrder: ReadonlyMap<string, string[]> = new Map(),
 ): FleetMapView {
   const depot = [...depots].sort(byCreatedAt)[0] ?? null;
   const depotPosition: LatLng | null = depot ? [depot.latitude, depot.longitude] : null;
@@ -133,6 +144,17 @@ export function buildFleetMapView(
       activeOrdersByVehicle.set(order.assignedVehicleId, list);
     }
   }
+  // Optimized order wins over creation order for the vehicles the
+  // optimizer planned. Unlisted orders (new since the run, or never
+  // planned) fall back to creation order after the planned ones.
+  for (const [vehicleId, orderIds] of optimizedStopOrder) {
+    const active = activeOrdersByVehicle.get(vehicleId);
+    if (!active) {
+      continue;
+    }
+    const rank = new Map(orderIds.map((id, i) => [id, i]));
+    active.sort((a, b) => (rank.get(a.id) ?? orderIds.length) - (rank.get(b.id) ?? orderIds.length));
+  }
 
   const routes: MapRoute[] = [];
   const markers: MapVehicleMarker[] = [];
@@ -148,9 +170,10 @@ export function buildFleetMapView(
   const addRoute = (vehicleId: string, plateNumber: string, vehicleIndex: number, active: Order[]): void => {
     const road = roadRoutes.get(vehicleId);
     const color = ROUTE_COLORS[vehicleIndex % ROUTE_COLORS.length];
+    const optimized = optimizedStopOrder.has(vehicleId);
     if (road && road.points.length >= 2) {
       routes.push({ vehicleId, plateNumber, points: road.points, color, source: 'road',
-        distanceMetres: road.distanceMetres, durationSeconds: road.durationSeconds });
+        distanceMetres: road.distanceMetres, durationSeconds: road.durationSeconds, optimized });
       return;
     }
     const points: LatLng[] = [
@@ -158,7 +181,7 @@ export function buildFleetMapView(
       ...active.map((order) => stopByOrderId.get(order.id)!.position),
     ];
     if (points.length >= 2) {
-      routes.push({ vehicleId, plateNumber, points, color, source: 'straight' });
+      routes.push({ vehicleId, plateNumber, points, color, source: 'straight', optimized });
     }
   };
 

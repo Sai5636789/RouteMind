@@ -206,4 +206,60 @@ describe('buildFleetMapView', () => {
     expect(view.vehicles.map((marker) => marker.vehicle.id)).toEqual(['v2']);
     expect(view.vehicles[0].placement).toBe('at-depot');
   });
+
+  it('draws a vehicle route in optimized order when an optimization was run', () => {
+    const onRoute = vehicle('v1', 'ABC-123', 'ON_ROUTE');
+    const orders = [
+      order('o1', 'Ana', 'ASSIGNED', 29.66, -82.32, 'v1', '2026-11-12T00:00:00Z'),
+      order('o2', 'Ben', 'ASSIGNED', 29.68, -82.3, 'v1', '2026-11-12T01:00:00Z'),
+      order('o3', 'Cid', 'ASSIGNED', 29.64, -82.34, 'v1', '2026-11-12T02:00:00Z'),
+    ];
+
+    const view = buildFleetMapView(
+      [depot], [onRoute], orders,
+      new Map(), new Map(),
+      new Map([['v1', ['o3', 'o1', 'o2']]]),
+    );
+
+    // Stop markers keep creation numbers; the route follows the
+    // optimized visit order instead.
+    expect(view.stops.map((stop) => stop.order.id)).toEqual(['o1', 'o2', 'o3']);
+    expect(view.routes.length).toBe(1);
+    expect(view.routes[0].points).toEqual([
+      [29.6516, -82.3248],
+      [29.64, -82.34],
+      [29.66, -82.32],
+      [29.68, -82.3],
+    ]);
+    expect(view.routes[0].optimized).toBeTrue();
+  });
+
+  it('keeps creation order for vehicles with no optimized plan', () => {
+    const onRoute = vehicle('v1', 'ABC-123', 'ON_ROUTE');
+    const other = vehicle('v2', 'DEF-456', 'ON_ROUTE');
+    const orders = [
+      order('o1', 'Ana', 'ASSIGNED', 29.66, -82.32, 'v1', '2026-11-12T00:00:00Z'),
+      order('o2', 'Ben', 'ASSIGNED', 29.68, -82.3, 'v2', '2026-11-12T01:00:00Z'),
+      order('o3', 'Cid', 'ASSIGNED', 29.64, -82.34, 'v1', '2026-11-12T02:00:00Z'),
+    ];
+
+    const view = buildFleetMapView(
+      [depot], [onRoute, other], orders,
+      new Map(), new Map(),
+      new Map([['v1', ['o3', 'o1']]]),
+    );
+
+    const v1Route = view.routes.find((route) => route.vehicleId === 'v1');
+    expect(v1Route?.points).toEqual([
+      [29.6516, -82.3248],
+      [29.64, -82.34],
+      [29.66, -82.32],
+    ]);
+    const v2Route = view.routes.find((route) => route.vehicleId === 'v2');
+    expect(v2Route?.points).toEqual([
+      [29.6516, -82.3248],
+      [29.68, -82.3],
+    ]);
+    expect(v2Route?.optimized).toBeFalsy();
+  });
 });

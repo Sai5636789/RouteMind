@@ -10,6 +10,13 @@ export function apiErrorMessage(error: unknown): string {
     if (error.status === 0) {
       return 'The RouteMind API is not answering. Start the backend and try again.';
     }
+    if (error.status === 200) {
+      // A 200 that still surfaces as an error means the response was not
+      // usable JSON — in development the dev server answers with the app
+      // shell when the API proxy has no backend to forward to. Say so
+      // plainly instead of reporting the misleading "returned 200".
+      return 'The RouteMind API is not answering. Start the backend and try again.';
+    }
     if (error.status === 401) {
       return 'Sign-in is required. Authentication is not implemented yet, so this action is unavailable until it lands.';
     }

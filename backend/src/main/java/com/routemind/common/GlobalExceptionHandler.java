@@ -1,5 +1,6 @@
 package com.routemind.common;
 
+import com.routemind.optimization.OptimizationUnavailableException;
 import com.routemind.routing.RoutingUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -56,6 +57,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RoutingUnavailableException.class)
     ResponseEntity<ApiError> handleRoutingUnavailable(RoutingUnavailableException ex, HttpServletRequest request) {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(OptimizationUnavailableException.class)
+    ResponseEntity<ApiError> handleOptimizationUnavailable(OptimizationUnavailableException ex, HttpServletRequest request) {
         return error(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
     }
 

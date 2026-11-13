@@ -348,8 +348,97 @@ Not verified in this VM:
 
 ## Route optimization
 
-Google OR-Tools: capacity-constrained vehicle routing, depot start/end,
-route comparison.
+Google OR-Tools 9.15.6755: capacity-constrained vehicle routing, depot
+start/end, route comparison against the creation-order plan, OSRM
+matrix with an honest straight-line fallback. Backend
+(`backend/src/main/java/com/routemind/optimization/`): `VrpSolver`
+(OR-Tools model: duration cost, capacity dimension in grams, drop
+penalty 1,000,000 s so a visit is dropped only when capacity forces
+it), `OptimizationService` (`optimize` / `compare` on an explicit
+input, `optimize-current` / `compare-current` on the live dispatch
+state — first depot, AVAILABLE vehicles, CREATED orders),
+`OptimizationController` (validation: 1–10 vehicles, 1–50 orders),
+`OsrmTravelMatrixProvider` / `StraightLineTravelMatrixProvider`
+(haversine + 40 km/h). Optimization is read-only: it assigns nothing
+and writes nothing. Frontend: an **Optimize routes** button on the
+fleet map, a results card with optimized vs creation-order totals,
+savings, per-vehicle stops in visit order, unassigned orders and the
+matrix source, and a "This is a plan, not an assignment" disclaimer;
+the map redraws routes in optimized order and **Clear optimized plan**
+returns to creation order. A failed run leaves the map exactly as it
+was and shows the error.
+
+The solver parameters were the hard part. OR-Tools 9.15 validates
+every sub-parameter and rejects proto-zero values one field at a time
+(neighbourhood operators must be `BOOL_TRUE`/`BOOL_FALSE`, savings
+`neighbors_ratio` and `max_memory_usage_bytes` must be set, and so
+on) — and a hand-filled set that finally passed validation still
+failed every solve outright (`ROUTING_FAIL`, no solution, no log).
+The fix is to start from the library's own defaults and override
+only the three decisions this service makes:
+`main.defaultRoutingSearchParameters().toBuilder()`, cheapest-arc
+first solution, guided local search, time limit. That is the same
+base every official OR-Tools example uses.
+
+Verified scenario (run 2026-11-13 against the real production code,
+`OptimizationService.compare`, OSRM unreachable here so the matrix
+is `STRAIGHT_LINE`): Gainesville Depot (29.6516, -82.3248); 2
+vehicles × 100 kg (VAN-001, VAN-002); 6 orders, 165 kg total, so
+capacity binds and both vehicles must be used — UF campus 30 kg,
+Butler Plaza 25 kg, NE Gainesville 40 kg, SW Archer Rd 20 kg, East
+Gainesville 35 kg, NW Gainesville 15 kg. Solver status
+`OPTIMAL_OR_IMPROVED`, solve time 5,365 ms (5 s limit), 0
+unassigned. Optimized: VAN-001 [NW, NE, East] 90 kg, 14.7 km,
+22.1 min; VAN-002 [Butler Plaza, SW Archer, UF] 75 kg, 15.4 km,
+23.1 min; total 30.2 km, 45.3 min. Creation-order baseline:
+VAN-001 [UF, Butler, NE] 95 kg, 19.9 km, 29.9 min; VAN-002
+[SW Archer, East, NW] 70 kg, 29.7 km, 44.6 min; total 49.7 km,
+74.5 min. Saved: 19.5 km (39.3%), 29.3 min (39.3%), on the same
+straight-line matrix. The optimized routes cluster geographically
+(north/east vs south/west) while the baseline zig-zags across town,
+which is the expected shape of a real improvement. Scenario runner
+kept out of the repo at `/tmp/optimization-scenario/`; output in
+`/tmp/optimization-scenario/scenario-output.txt`.
+
+Verification in this session: backend optimization tests 16/16 pass
+(`VrpSolverTest` 4, `OptimizationServiceTest` 6,
+`OptimizationControllerTest` 6); full backend suite 98/102 pass
+(excluding `RouteMindApplicationTests`, which needs live Postgres +
+Redis — neither is installed in this VM, so it was not run). The 4
+failures are all `OsrmClientTest` localhost stub-server tests: the
+JVM's TCP connections are blocked by the sandbox, so the client gets
+the sandbox's plain-text block message ("muse: Other TCP
+connections is turned off") instead of HTTP — an environment limit,
+not a code failure. Two runner gotchas found and fixed along the
+way: the hand-built test classpath must be compiled with
+`javac -parameters` (Spring needs parameter names for `@RequestParam`
+binding — without it, 14 controller tests failed with a misleading
+400) and Maven still cannot run here (parent POM and BOM chain had
+to be fetched with curl first; the plugin jars remain unresolvable
+through the mirror). Frontend production build passes (unchanged,
+pre-existing 500 kB budget warning); frontend tests 33/33 pass (28
+before + 5 new `api-error` tests). Screenshot
+`work/screenshots/optimization-map.png` shows the honest state with
+the backend down: "The RouteMind API is not answering. Start the
+backend and try again." with Retry — fixing that message was part
+of this milestone: when the backend is down, the dev-server proxy
+answers API calls with the app shell (HTTP 200), and the old message
+reported the misleading "The API returned 200". `api-error.ts` now
+treats a 200 that arrives as an error as "not answering".
+
+Not verified in this VM:
+
+- The optimization result on the live map: the map screenshot above
+  is the backend-down state, because the backend cannot start here
+  (no Postgres/Redis; `docker compose up` is blocked). The map
+  rendering of optimized routes is covered by the component tests
+  (optimized order vs creation order, savings card, failed run keeps
+  the map). On a normal machine: `docker compose up --build`, open
+  `localhost:4200/map`, add a depot, vehicles and orders, and press
+  **Optimize routes**.
+- A real OSRM matrix end to end (same open item as the OSRM
+  milestone): the solver ran on the straight-line matrix here; with
+  OSRM reachable the same code path takes the `OSRM` matrix instead.
 
 ## Dispatch and delivery workflow
 

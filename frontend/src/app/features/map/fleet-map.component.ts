@@ -13,7 +13,9 @@ import { Order } from '../../core/models/order';
 import { Vehicle } from '../../core/models/vehicle';
 import { VehiclePosition } from '../../core/models/vehicle-position';
 import { RoadRoute } from '../../core/models/route';
+import { OptimizationComparison } from '../../core/models/optimization';
 import { DepotService } from '../../core/services/depot.service';
+import { OptimizationService } from '../../core/services/optimization.service';
 import { OrderService } from '../../core/services/order.service';
 import { RoutingService } from '../../core/services/routing.service';
 import { TrackingConnection, TrackingService } from '../../core/services/tracking.service';
@@ -58,6 +60,7 @@ export class FleetMapComponent implements OnInit, OnDestroy {
   private readonly orders = inject(OrderService);
   private readonly tracking = inject(TrackingService);
   private readonly routing = inject(RoutingService);
+  private readonly optimization = inject(OptimizationService);
 
   protected readonly state = signal<LoadState>('loading');
   protected readonly error = signal<string | null>(null);
@@ -67,6 +70,12 @@ export class FleetMapComponent implements OnInit, OnDestroy {
   private readonly roadRoutes = signal<Map<string, RoadRoute>>(new Map());
   /** True when at least one road-route request failed — the map then shows straight lines. */
   protected readonly roadRoutesUnavailable = signal(false);
+  /** The last optimization comparison, if the dispatcher ran one. */
+  protected readonly optimizationResult = signal<OptimizationComparison | null>(null);
+  protected readonly optimizing = signal(false);
+  protected readonly optimizationError = signal<string | null>(null);
+  /** Optimized stop order per vehicle (vehicle id -> order ids in visit order). */
+  private readonly optimizedStopOrder = signal<Map<string, string[]>>(new Map());
 
   private readonly depotList = signal<Depot[]>([]);
   private readonly vehicleList = signal<Vehicle[]>([]);
@@ -93,6 +102,7 @@ export class FleetMapComponent implements OnInit, OnDestroy {
       this.shownOrders(),
       this.livePositions(),
       road,
+      this.optimizedStopOrder(),
     );
   });
 
@@ -135,6 +145,9 @@ export class FleetMapComponent implements OnInit, OnDestroy {
     this.error.set(null);
     this.roadRoutes.set(new Map());
     this.roadRoutesUnavailable.set(false);
+    this.optimizationResult.set(null);
+    this.optimizationError.set(null);
+    this.optimizedStopOrder.set(new Map());
     forkJoin({
       depots: this.depots.list().pipe(catchError((e) => of({ error: e }))),
       vehicles: this.vehicles.list(undefined, 0, 100).pipe(catchError((e) => of({ error: e }))),
@@ -167,10 +180,54 @@ export class FleetMapComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Road routes for every vehicle with active assigned stops: depot, then
-   * the stops in creation order. A failed request leaves that vehicle on
-   * its straight line and raises the fallback note — road routing never
-   * blocks the map, and a missing route is never drawn as a road route.
+   * Runs route optimization for the current dispatch state and shows
+   * the result on the map. Optimization is a read-only computation —
+   * it assigns nothing — so the map simply redraws the routes in the
+   * optimized visit order, and the summary below the map reports what
+   * the optimized plan saves against the creation-order plan. A failed
+   * run leaves the map exactly as it was, with the error shown.
+   */
+  protected optimize(): void {
+    if (this.optimizing()) {
+      return;
+    }
+    this.optimizing.set(true);
+    this.optimizationError.set(null);
+    this.subscriptions.add(
+      this.optimization.compareCurrent().subscribe({
+        next: (comparison) => {
+          this.optimizationResult.set(comparison);
+          const order = new Map<string, string[]>();
+          for (const route of comparison.optimized.routes) {
+            order.set(route.vehicleId, route.orderIds);
+          }
+          this.optimizedStopOrder.set(order);
+          this.optimizing.set(false);
+          this.loadRoadRoutes();
+        },
+        error: (error: unknown) => {
+          this.optimizationError.set(apiErrorMessage(error));
+          this.optimizing.set(false);
+        },
+      }),
+    );
+  }
+
+  /** Clears the optimized plan and returns the map to creation order. */
+  protected clearOptimization(): void {
+    this.optimizationResult.set(null);
+    this.optimizationError.set(null);
+    this.optimizedStopOrder.set(new Map());
+    this.loadRoadRoutes();
+  }
+
+  /**
+   * Road routes for every vehicle with active assigned stops: depot,
+   * then the stops in optimized order when an optimization was run,
+   * otherwise in creation order. A failed request leaves that vehicle
+   * on its straight line and raises the fallback note — road routing
+   * never blocks the map, and a missing route is never drawn as a road
+   * route.
    */
   private loadRoadRoutes(): void {
     const depot = [...this.depotList()].sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
@@ -184,6 +241,11 @@ export class FleetMapComponent implements OnInit, OnDestroy {
         );
         if (active.length === 0) {
           return null;
+        }
+        const optimized = this.optimizedStopOrder().get(vehicle.id);
+        if (optimized) {
+          const rank = new Map(optimized.map((id, i) => [id, i]));
+          active.sort((a, b) => (rank.get(a.id) ?? optimized.length) - (rank.get(b.id) ?? optimized.length));
         }
         const points = [
           { latitude: depot.latitude, longitude: depot.longitude },
@@ -232,6 +294,18 @@ export class FleetMapComponent implements OnInit, OnDestroy {
       this.map.flyTo(leafletMarker.getLatLng(), Math.max(this.map.getZoom(), 14));
       leafletMarker.openPopup();
     }
+  }
+
+  protected formatKm(metres: number): string {
+    return `${(metres / 1000).toFixed(1)} km`;
+  }
+
+  protected formatMinutes(seconds: number): string {
+    return `${Math.round(seconds / 60)} min`;
+  }
+
+  protected orderName(orderId: string): string {
+    return this.orderList().find((order) => order.id === orderId)?.customerName ?? orderId;
   }
 
   protected vehiclePlacementNote(marker: MapVehicleMarker): string {
@@ -354,12 +428,13 @@ export class FleetMapComponent implements OnInit, OnDestroy {
   }
 
   private routeTooltip(route: MapRoute): string {
+    const order = route.optimized ? 'optimized order' : 'creation order';
     if (route.source === 'road') {
       const km = ((route.distanceMetres ?? 0) / 1000).toFixed(1);
       const minutes = Math.round((route.durationSeconds ?? 0) / 60);
-      return `${escapeHtml(route.plateNumber)} — road route · ${km} km · ${minutes} min`;
+      return `${escapeHtml(route.plateNumber)} — road route · ${km} km · ${minutes} min · stops in ${order}`;
     }
-    return `${escapeHtml(route.plateNumber)} — direct line, stops in creation order`;
+    return `${escapeHtml(route.plateNumber)} — direct line, stops in ${order}`;
   }
 
   private plateFor(vehicleId: string): string {

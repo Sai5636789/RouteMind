@@ -146,10 +146,11 @@ fleet on OpenStreetMap tiles:
   so no position is ever invented; a vehicle that cannot be placed is
   listed in the side panel instead of on the map.
 - **Routes** — a dashed polyline per vehicle, depot to its active
-  assigned stops in creation order. When the road router is reachable
-  the line follows real roads (tooltip shows distance and driving
-  time); otherwise it is a direct line and the map says so (see Road
-  routing below). Optimized routing arrives with route optimization.
+  assigned stops. When the road router is reachable the line follows
+  real roads (tooltip shows distance and driving time); otherwise it
+  is a direct line and the map says so (see Road routing below). After
+  an optimization run the stops follow the optimized visit order
+  instead of creation order (see Route optimization below).
 - **Side panel** — depot, vehicles and stops; clicking one flies the
   map to it. An "Active orders only" filter hides delivered and
   cancelled stops.
@@ -210,6 +211,44 @@ starts and works without it, and everything degrades honestly.
   server (for example the public demo server,
   `https://router.project-osrm.org` — fine for a quick check, not a
   dependency to rely on).
+
+## Route optimization
+
+The fleet map has an **Optimize routes** button. It solves a
+capacity-constrained vehicle routing problem with Google OR-Tools:
+every available vehicle starts at the depot, visits its assigned
+stops, and returns to the depot, never carrying more than its
+capacity. Orders no vehicle has room for are reported as unassigned,
+never silently dropped.
+
+- **Endpoints** (`backend/src/main/java/com/routemind/optimization/`):
+  `POST /api/v1/optimization/optimize-current` (first depot, AVAILABLE
+  vehicles, CREATED orders), `POST /api/v1/optimization/compare-current`
+  (the same run next to the creation-order plan, with what it saves),
+  plus `POST /api/v1/optimization/optimize` and `/compare` for an
+  explicit depot / vehicle / order set. Optimization is a read-only
+  computation — it assigns nothing and writes nothing; saving a plan
+  as assignments is the dispatch workflow's job.
+- **Matrix:** the solver runs on a travel-time / distance matrix from
+  the OSRM road router when it answers, and from straight-line
+  haversine distances (durations estimated at 40 km/h) when it does
+  not. The result always says which matrix it used (`OSRM` or
+  `STRAIGHT_LINE`), so a straight-line plan is never presented as road
+  routing. The comparison baseline is the creation-order plan —
+  orders handed to the first vehicle with room, stops in creation
+  order — computed on the same matrix, so the comparison is apples to
+  apples.
+- **Map:** after a run, the routes redraw in the optimized visit order
+  and the summary reports the optimized totals against the
+  creation-order totals, per-vehicle stops in visit order, and any
+  unassigned orders. **Clear optimized plan** returns the map to
+  creation order.
+- **Settings** (`application.yml`, overridable by environment):
+  `OPTIMIZATION_ENABLED` (default `true`),
+  `OPTIMIZATION_SOLVER_TIME_LIMIT` (default `5s`),
+  `OPTIMIZATION_MAX_ORDERS` (default `50`),
+  `OPTIMIZATION_MAX_VEHICLES` (default `10`),
+  `OPTIMIZATION_STRAIGHT_LINE_SPEED_KMH` (default `40`).
 
 Simulator settings (`application.yml`, overridable by environment):
 

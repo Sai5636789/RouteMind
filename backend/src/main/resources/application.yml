@@ -46,6 +46,17 @@ routemind:
     connect-timeout: ${OSRM_CONNECT_TIMEOUT:2s}
     read-timeout: ${OSRM_READ_TIMEOUT:5s}
     max-waypoints: ${OSRM_MAX_WAYPOINTS:25}
+  optimization:
+    # Google OR-Tools capacity-constrained routing. The solver runs on a
+    # travel-time / distance matrix: OSRM road times when the router
+    # answers, straight-line haversine distances (durations estimated at
+    # the average speed below) when it does not. The matrix source is
+    # always reported with the result.
+    enabled: ${OPTIMIZATION_ENABLED:true}
+    solver-time-limit: ${OPTIMIZATION_SOLVER_TIME_LIMIT:5s}
+    max-orders: ${OPTIMIZATION_MAX_ORDERS:50}
+    max-vehicles: ${OPTIMIZATION_MAX_VEHICLES:10}
+    straight-line-speed-kmh: ${OPTIMIZATION_STRAIGHT_LINE_SPEED_KMH:40}
   tracking:
     # Simulated GPS: moves ON_ROUTE vehicles along their assigned stops.
     # Switch off when real GPS feeds arrive; the map then shows only

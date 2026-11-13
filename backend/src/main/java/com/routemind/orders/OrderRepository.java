@@ -12,6 +12,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     List<Order> findByAssignedVehicleIdAndStatusInOrderByCreatedAtAsc(
             UUID vehicleId, Collection<OrderStatus> statuses);
 
+    List<Order> findByStatusOrderByCreatedAtAsc(OrderStatus status);
+
     Page<Order> findByStatus(OrderStatus status, Pageable pageable);
 
     Page<Order> findByAssignedVehicleId(UUID vehicleId, Pageable pageable);
