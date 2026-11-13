@@ -48,7 +48,9 @@ Verification (Nov 12, 2026, in this sandbox):
 Remaining issues:
 
 - Authentication mechanism not implemented yet — protected endpoints return
-  401 by design. Lands with the authentication feature.
+  401 by design. Landed Nov 13, 2026 with the JWT authentication
+  milestone (login endpoint, Bearer tokens, temporary public reads
+  removed).
 - JDBC URLs carry `gssEncMode=disable`: the app authenticates with a
   password, not Kerberos, and GSSAPI-enabled Postgres servers answer 'G'
   to the driver's GSS probe, which fails without Kerberos credentials.
@@ -141,7 +143,8 @@ Remaining issues:
 - Authentication not implemented yet — protected endpoints return 401
   by design, so the dashboard's tables show the sign-in error until it
   lands. The dashboard is wired to the real APIs; it just cannot read
-  them yet without auth.
+  them yet without auth. (Landed Nov 13, 2026 with the JWT
+  authentication milestone.)
 
 ## Temporarily open reads + fleet map — completed Nov 12, 2026
 
@@ -206,8 +209,8 @@ Verification (Nov 12, 2026, in this sandbox):
 
 Remaining issues:
 
-- Authentication (JWT login) still to be added; when it lands, the
-  temporary public reads must be removed.
+- Authentication (JWT login) landed Nov 13, 2026; the temporary public
+  reads were removed with it.
 - The fleet map shows real data only once the backend runs; until
   then it shows the honest "Backend unreachable" state.
 
@@ -282,6 +285,110 @@ Remaining issues:
 - Writes still answer 401 until JWT login lands (HTTP Basic is
   disabled by design); test data can only be seeded directly in the
   database for now.
+## JWT authentication — completed Nov 13, 2026
+
+Login, Bearer tokens, and the removal of the temporary public reads. All
+in the working tree on branch `feature/jwt-auth`, not committed — commits
+are on hold until Sai says to commit/push, and the parent agent handles
+the GitHub branch/PR.
+
+What was built:
+
+- Backend `com.routemind.auth`: `AuthProperties` (`routemind.auth` in
+  `application.yml`: `jwt-secret`, `token-ttl` default 8h,
+  `dispatcher-username`, `dispatcher-password` — all from the environment
+  in practice), `JwtService` (JJWT 0.12.6, HMAC-SHA256, subject is the
+  username, expiry from `token-ttl`; refuses to start with a secret
+  shorter than 32 characters and logs a warning while the dev secret is
+  in use), `DispatcherCredentials` (the single seeded dispatcher
+  account; the configured password is BCrypt-hashed in memory at
+  startup, never stored or logged; username comparison is constant-time),
+  `AuthController` (`POST /api/v1/auth/login` returns
+  `{token, tokenType: "Bearer", expiresInSeconds, username}`; wrong
+  credentials answer 401 with one generic message for a wrong username
+  and a wrong password), `JwtAuthenticationFilter` (validates the Bearer
+  token — or the `token` query parameter on `/ws` handshakes, which
+  cannot carry an Authorization header — and sets the dispatcher
+  principal; it never rejects by itself), and `WebSocketAuthInterceptor`
+  + `AuthenticatedHandshakeHandler` (the `/ws` handshake requires a
+  valid JWT and attaches the username as the session principal).
+- `SecurityConfig` rewritten: only `/api/v1/health`, `/actuator/health`,
+  `/actuator/info` and `POST /api/v1/auth/login` are public. The
+  temporary public reads are gone — every fleet, order, depot, tracking,
+  routing and optimization endpoint, reads included, and the `/ws`
+  handshake require a valid token. Unauthenticated requests answer 401.
+- Frontend: `AuthService` (login, token in localStorage, expiry read
+  from the token's own `exp` claim so a stale token starts signed out,
+  logout discards the token — tokens are stateless, nothing to revoke),
+  `authInterceptor` (attaches `Authorization: Bearer` to every API call
+  except login; on 401 it signs out and redirects to `/login` with the
+  page to return to), `authGuard` on every dashboard route, a login page
+  at `/login` (username/password, inline error, loading state), the app
+  shell hides its navigation while signed out, and the toolbar shows the
+  signed-in dispatcher with a sign-out button (which also stops live
+  tracking). `TrackingService` passes the token as `?token=` on the
+  WebSocket URL; its snapshot poll fallback is authenticated by the
+  interceptor like any other API call. `api-error.ts` no longer says
+  authentication "has not landed yet" — a 401 now means the session
+  expired.
+- Docs: README has an Authentication section (how to log in, the dev
+  credentials `dispatcher` / `changeme`, and how to change them via
+  `DISPATCHER_USERNAME` / `DISPATCHER_PASSWORD` / `JWT_SECRET` in
+  `.env`); `.env.example` and `docker-compose.yml` pass those variables
+  to the backend. No multi-user or roles support — a single dispatcher
+  was the whole account model requested.
+- Tests: `JwtServiceTest` (round-trip, foreign secret, tampered and
+  expired tokens rejected, short secret refuses to start),
+  `AuthControllerTest` (login success/401/400, Bearer accepted and
+  rejected on a protected path), `auth.service.spec.ts`,
+  `auth.interceptor.spec.ts`, `login.component.spec.ts`, and
+  `app.spec.ts` updated for the signed-in/signed-out shell. The eight
+  existing controller slice tests gained a mocked `JwtService` (the
+  security filter is built from it), and `HealthControllerTest` now
+  asserts reads answer 401 and login is public instead of asserting the
+  temporary public reads.
+
+Verification (Nov 13, 2026, in this sandbox):
+
+- Backend compiles clean (`mvn -o compile`, 95 classes including the 9
+  new auth classes). Note: this VM blocks Java TCP entirely (the sandbox
+  answers Java sockets with a policy message), so Maven cannot download
+  anything itself; the local repo was populated with curl from Maven
+  Central instead (fetch scripts in `~/workspace/tools/maven-fetch/`,
+  JDK 21 + Maven 3.9.9 in `~/workspace/tools/` — the VM was replaced
+  mid-task, which also wiped the earlier `/tmp` Maven install and the
+  `java.security` fix that had made the old JDK work).
+- Backend tests: 117 run, 110 pass. The new `JwtServiceTest` (6/6) and
+  `AuthControllerTest` (5/5) pass, as do `HealthControllerTest` (4/4,
+  now asserting reads answer 401 and login is public) and the four
+  controller slices updated to run authenticated
+  (`DepotControllerTest`, `TrackingControllerTest`,
+  `RoutingControllerTest`, `OptimizationControllerTest`). The 7 that do
+  not pass are the pre-existing sandbox Java-TCP failures, unchanged by
+  this milestone: `RouteMindApplicationTests` (3 errors — Flyway cannot
+  reach Postgres, "error while setting up the SSL connection") and
+  `OsrmClientTest` (1 failure + 3 errors — the test's local HTTP server
+  is unreachable from Java). Both need a normal machine or Docker run.
+- Frontend production build: passed (`npm run build`, Angular 20).
+  One warning remains: the initial bundle (875.90 kB) exceeds the
+  500 kB budget. The login page and auth code are a small part of that;
+  the budget itself predates this milestone.
+- Frontend unit tests: 45/45 pass (`ng test`, ChromeHeadless), including
+  the new `auth.service.spec.ts`, `auth.interceptor.spec.ts`,
+  `login.component.spec.ts`, the updated `app.spec.ts`, and the updated
+  `api-error.spec.ts` (its 401 expectation changed with the new message).
+- Login page screenshot: `work/screenshots/jwt-login-page.png` — the
+  sign-in card renders with username/password fields and a disabled
+  Sign in button (empty form). The backend was down for the screenshot,
+  so no login was submitted.
+- NOT VERIFIED here: a live end-to-end login (the backend cannot start
+  in this VM — Java cannot reach the local Postgres/Redis, same sandbox
+  limit as above) and the `/ws` handshake rejection with a live client.
+  The login endpoint, token validation, and the authenticated/401 paths
+  are covered by the `AuthControllerTest` slice tests instead. Verify on
+  a normal machine: `docker compose up --build`, open
+  `localhost:4200`, sign in as `dispatcher` / `changeme`.
+
 ## Road routing
 
 Self-hosted OSRM (Florida extract) for real road routes on the fleet

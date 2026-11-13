@@ -5,6 +5,7 @@ import { BehaviorSubject, Observable, Subscription, interval, of } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { VehiclePosition } from '../models/vehicle-position';
+import { AuthService } from './auth.service';
 
 /**
  * How the map is getting positions right now. "live" means the STOMP
@@ -17,6 +18,7 @@ export type TrackingConnection = 'live' | 'polling' | 'offline';
 @Injectable({ providedIn: 'root' })
 export class TrackingService implements OnDestroy {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
   private readonly url = `${environment.apiUrl}/tracking/vehicles`;
 
   private readonly positionsSubject = new BehaviorSubject<Map<string, VehiclePosition>>(new Map());
@@ -116,6 +118,11 @@ export class TrackingService implements OnDestroy {
       return environment.wsUrl;
     }
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    return `${protocol}://${window.location.host}/ws`;
+    const base = `${protocol}://${window.location.host}/ws`;
+    // The handshake cannot carry an Authorization header, so the token
+    // travels as a query parameter; the backend validates it before the
+    // handshake completes.
+    const token = this.auth.token();
+    return token === null ? base : `${base}?token=${encodeURIComponent(token)}`;
   }
 }

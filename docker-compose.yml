@@ -51,6 +51,13 @@ services:
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-routemind_dev}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # JWT_SECRET falls back to the same local-dev default as
+      # application.yml (an empty value would override that default and
+      # make the backend refuse to start, so it is never passed empty).
+      JWT_SECRET: ${JWT_SECRET:-routemind-dev-secret-change-me-before-any-shared-deployment-0123456789}
+      JWT_TOKEN_TTL: ${JWT_TOKEN_TTL:-8h}
+      DISPATCHER_USERNAME: ${DISPATCHER_USERNAME:-dispatcher}
+      DISPATCHER_PASSWORD: ${DISPATCHER_PASSWORD:-changeme}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     depends_on:

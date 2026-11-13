@@ -3,7 +3,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 /**
  * Turns an HTTP failure into a message a dispatcher can act on.
  * The backend's error shape is { message, status, ... }; a 401 here means
- * the authentication feature has not landed yet, not a wrong password.
+ * the session expired (or the token was rejected), and the interceptor
+ * has already sent the dispatcher back to the login page.
  */
 export function apiErrorMessage(error: unknown): string {
   if (error instanceof HttpErrorResponse) {
@@ -18,7 +19,7 @@ export function apiErrorMessage(error: unknown): string {
       return 'The RouteMind API is not answering. Start the backend and try again.';
     }
     if (error.status === 401) {
-      return 'Sign-in is required. Authentication is not implemented yet, so this action is unavailable until it lands.';
+      return 'Your session has expired or you are not signed in. Sign in and try again.';
     }
     const body = error.error as { message?: string } | null;
     if (typeof body?.message === 'string' && body.message.length > 0) {

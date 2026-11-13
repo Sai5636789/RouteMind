@@ -1,5 +1,5 @@
--- Foundation: spatial support and the single depot the fleet operates from.
--- Vehicle, driver and order tables arrive with the backend APIs.
+/* Foundation: spatial support and the single depot the fleet operates from.
+   Vehicle, driver and order tables arrive with the backend APIs. */
 CREATE EXTENSION IF NOT EXISTS postgis;
 
 CREATE TABLE depots (

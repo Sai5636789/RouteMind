@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.routemind.config.SecurityConfig;
+import com.routemind.auth.JwtService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -15,11 +16,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(TrackingController.class)
 @Import(SecurityConfig.class)
+// Authentication is exercised by HealthControllerTest (protected
+// paths answer 401); these tests run as an authenticated caller
+// so they verify the controller behaviour itself.
+@WithMockUser
 class TrackingControllerTest {
+
+    // SecurityConfig builds its JWT filter from JwtService; the mock
+    // keeps the slice focused on the controller, not on token parsing.
+    @MockitoBean
+    private JwtService jwtService;
 
     @Autowired
     private MockMvc mvc;
