@@ -602,12 +602,15 @@ Sidebar gains a Dispatch entry.
   machine with `docker compose up --build`, sign in as
   `dispatcher` / `changeme`, and work a plan through on the Dispatch
   page.
-- Known limitation: if a vehicle on an APPROVED plan breaks down, the
-  incident flow unassigns its orders and flags them, but the plan's
-  stops are not updated to match — the stop still shows its order's
-  live status (CREATED, flagged) in the plan detail, and the driver
-  route no longer lists it as assigned. The next dispatch work should
-  reconcile plan stops when an incident lands.
+- Known limitation, fixed with the final polish: if a vehicle on an
+  APPROVED plan breaks down, the incident flow unassigned its orders
+  and flagged them, but the plan's stops were not updated to match.
+  `IncidentService.reportBreakdown` now cancels the live (PENDING or
+  PICKED_UP) stops for the affected orders on APPROVED plans, and the
+  driver route skips cancelled stops; delivered and failed stops are
+  never touched, and DRAFT plans are left alone (approval refuses the
+  broken-down vehicle, so the dispatcher rejects or recreates the
+  draft). See the final polish section below.
 
 ## Incidents and integration testing — completed Nov 13, 2026
 
@@ -740,6 +743,85 @@ Not verified in this VM:
   in the flow test; with OSRM reachable the same code path takes the
   `OSRM` matrix instead.
 
-## Polish and documentation
+## Final polish and documentation — completed Nov 13, 2026
 
-UI refinement, sample datasets, Docker startup, README, screenshots, demo.
+UI refinement, sample datasets, Docker startup, README, screenshots,
+demo.
+
+- **Sample dataset** (`V5__sample_demo_dataset.sql`): 8 vehicles
+  (`VAN-001`–`VAN-008`, 100–300 kg), 8 active drivers, and 24
+  unassigned `CREATED` orders at real Gainesville locations, 11–40 kg
+  each, 550 kg in total — more than any one vehicle carries, so the
+  optimizer has to split the work. The depot id is looked up from
+  `depots`, not hard-coded. Nothing is pre-assigned; the dispatcher
+  still creates the plan and works the deliveries. Restarting from
+  scratch is `docker compose down -v && docker compose up --build`.
+  `RouteMindApplicationTests` gained a seed-count assertion (8
+  vehicles, 8 drivers, 24 orders, all `CREATED`).
+- **Plan-breakdown reconciliation** (the dispatch milestone's known
+  limitation, fixed here): `IncidentService.reportBreakdown` now
+  cancels the live stops of the affected orders on APPROVED plans
+  (`DispatchStopRepository.findByOrderId`, plan must be APPROVED,
+  stop must be PENDING or PICKED_UP); delivered and failed stops are
+  history and are never touched, and DRAFT plans are left alone
+  because approval refuses a broken-down vehicle. `DispatchService.driverRoute`
+  skips `CANCELLED` stops, so a driver no longer sees work that was
+  taken off them, while the plan keeps the cancelled stop as a
+  record. Tests: `IncidentServiceTest.breakdownCancelsLiveStopsOnApprovedPlanOnly`
+  (live stop cancelled, delivered stop untouched, draft-plan stop
+  untouched) and `DispatchServiceTest.driverRouteSkipsStopsCancelledByABreakdown`.
+- **UI refinement:** the open-breakdowns card on the Vehicles page
+  had its two actions as loose flex items in a wrapping row, so
+  Resolve dropped to its own line when the "— rerouted" text made
+  the row long. The buttons now sit in one `.incident-actions` group
+  (`margin-left: auto`, `flex-shrink: 0`, `white-space: nowrap`) and
+  stay together. No other cosmetic issue was found on a pass over the
+  dashboard, map, dispatch and login pages — loading, empty and
+  error states were already consistent.
+- **Documentation:** README is now the finished state — the API
+  table lists the tracking, routing, optimization and dispatch
+  endpoints (previously only fleet, orders and incidents), the
+  backend package list no longer names `simulation` and `analytics`
+  (never built), a Sample demo data section documents V5, and a
+  Demo walkthrough documents the full loop step by step (sign in →
+  optimize → create plan → approve → track live → breakdown →
+  reroute → resolve → deliver), including the optional OSRM setup.
+
+Verification (Nov 13, 2026, in this sandbox):
+
+- Backend: full suite 164 tests, 156 pass. The 8 misses are the
+  known sandbox limits: 4 `RouteMindApplicationTests` (the context
+  needs live Postgres + Redis, which are not running in this VM) and
+  4 `OsrmClientTest` (the JVM's TCP to a localhost stub server is
+  blocked here). The incident/dispatch subset is 40/40. The
+  reconciliation is covered by the two new tests above; the seed
+  counts are covered by the new `RouteMindApplicationTests`
+  assertion, which needs the live Postgres + Redis and therefore
+  runs only on a real machine.
+- Frontend production build passes; frontend tests 62/62 pass (the
+  vehicle-list incident tests cover the regrouped buttons).
+- Screenshots (real frontend, `ng serve` + a throwaway stub API on
+  `:8080` serving fixed fake data, because the backend cannot start
+  in this VM — the data is labelled stub data here, not a backend
+  verification):
+
+  - `work/screenshots/polish-login.png` — login page.
+  - `work/screenshots/polish-dashboard.png` — Overview with the
+    seeded fleet (8 vehicles, 8 drivers, 24 created orders).
+  - `work/screenshots/polish-dispatch.png` — Dispatch page with the
+    seeded plan review.
+  - `work/screenshots/polish-map.png` — Fleet map with the seeded
+    stops.
+
+Not verified in this VM:
+
+- The V5 migration applying to a real Postgres (Flyway), the full
+  `docker compose up` run, and the demo walkthrough end to end
+  against the live backend — the backend cannot boot here and
+  `docker compose up` is blocked. That first live run is issue #12;
+  on a normal machine it is `docker compose up --build`, sign in as
+  `dispatcher` / `changeme`, and follow the walkthrough in the
+  README.
+- Live OSRM road routing end to end (same open item as the OSRM
+  milestone): the walkthrough's step 9 is optional and the map falls
+  back to direct lines without it.

@@ -11,4 +11,6 @@ public interface DispatchStopRepository extends JpaRepository<DispatchStop, UUID
     List<DispatchStop> findByPlanIdAndVehicleIdOrderByStopIndexAsc(UUID planId, UUID vehicleId);
 
     List<DispatchStop> findByDriverIdAndPlanIdOrderByStopIndexAsc(UUID driverId, UUID planId);
+
+    List<DispatchStop> findByOrderId(UUID orderId);
 }

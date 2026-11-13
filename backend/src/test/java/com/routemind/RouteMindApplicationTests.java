@@ -39,6 +39,19 @@ class RouteMindApplicationTests {
     }
 
     @Test
+    void flywaySeededTheDemoDataset() {
+        Integer vehicleCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM vehicles", Integer.class);
+        assertThat(vehicleCount).isEqualTo(8);
+        Integer driverCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM drivers", Integer.class);
+        assertThat(driverCount).isEqualTo(8);
+        Integer orderCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM orders", Integer.class);
+        assertThat(orderCount).isEqualTo(24);
+        Integer createdCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM orders WHERE status = 'CREATED'", Integer.class);
+        assertThat(createdCount).isEqualTo(24);
+    }
+
+    @Test
     void redisAnswers() {
         assertThat(redisTemplate.getConnectionFactory().getConnection().ping()).isEqualTo("PONG");
     }

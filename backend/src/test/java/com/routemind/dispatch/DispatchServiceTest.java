@@ -360,4 +360,29 @@ class DispatchServiceTest {
         assertThat(route.get(0).customerName()).isEqualTo("Ana");
         assertThat(route.get(0).plateNumber()).isEqualTo("ABC-123");
     }
+
+    @Test
+    void driverRouteSkipsStopsCancelledByABreakdown() {
+        DispatchPlan approved = plan();
+        approved.setStatus(DispatchPlanStatus.APPROVED);
+        Order first = order(ORDER_ID, "Ana");
+        DispatchStop live = new DispatchStop(PLAN_ID, VEHICLE_ID, DRIVER_ID, ORDER_ID, 0, 4200, 378);
+        setId(live, STOP_ID);
+        DispatchStop cancelled = new DispatchStop(PLAN_ID, VEHICLE_ID, DRIVER_ID, ORDER2_ID, 1, 4200, 378);
+        cancelled.setStatus(DispatchStopStatus.CANCELLED);
+        setId(cancelled, STOP2_ID);
+        when(drivers.findById(DRIVER_ID)).thenReturn(Optional.of(driver()));
+        when(plans.findByStatus(DispatchPlanStatus.APPROVED, org.springframework.data.domain.Pageable.unpaged()))
+                .thenReturn(new PageImpl<>(List.of(approved)));
+        when(stops.findByPlanIdOrderByStopIndexAsc(PLAN_ID)).thenReturn(List.of(live, cancelled));
+        when(stops.findByDriverIdAndPlanIdOrderByStopIndexAsc(DRIVER_ID, PLAN_ID))
+                .thenReturn(List.of(live, cancelled));
+        when(vehicles.findById(VEHICLE_ID)).thenReturn(Optional.of(vehicle()));
+        when(orders.findById(ORDER_ID)).thenReturn(Optional.of(first));
+
+        List<DispatchPlanResponse.DriverStopView> route = service().driverRoute(DRIVER_ID);
+
+        assertThat(route).hasSize(1);
+        assertThat(route.get(0).customerName()).isEqualTo("Ana");
+    }
 }

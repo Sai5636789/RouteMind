@@ -4,6 +4,12 @@ import com.routemind.common.ConflictException;
 import com.routemind.common.ResourceNotFoundException;
 import com.routemind.depot.Depot;
 import com.routemind.depot.DepotRepository;
+import com.routemind.dispatch.DispatchPlan;
+import com.routemind.dispatch.DispatchPlanRepository;
+import com.routemind.dispatch.DispatchPlanStatus;
+import com.routemind.dispatch.DispatchStop;
+import com.routemind.dispatch.DispatchStopRepository;
+import com.routemind.dispatch.DispatchStopStatus;
 import com.routemind.fleet.Driver;
 import com.routemind.fleet.DriverRepository;
 import com.routemind.fleet.DriverStatus;
@@ -52,7 +58,13 @@ import org.springframework.transaction.annotation.Transactional;
  *       still on its route.</li>
  * </ul>
  *
- * <p>A reroute re-runs the real optimizer — the same
+ * <p>An approved dispatch plan is reconciled, too: a stop whose order
+ * just lost its vehicle is cancelled on the plan, so the plan, the
+ * driver route and the order all agree the stop is no longer live.
+ * A stop already delivered or failed is history and is never touched,
+ * and a DRAFT plan is a proposal, not live work — its stops are left
+ * alone, and approval will refuse the broken-down vehicle anyway, so
+ * the dispatcher rejects or recreates the draft.
  * {@link OptimizationService} the map uses — over only the orders this
  * incident flagged and only the vehicles that are AVAILABLE right now.
  * Orders that were never affected are never touched, and the optimizer
@@ -78,6 +90,8 @@ public class IncidentService {
     private final DepotRepository depots;
     private final IncidentRepository incidents;
     private final IncidentOrderRepository incidentOrders;
+    private final DispatchPlanRepository dispatchPlans;
+    private final DispatchStopRepository dispatchStops;
     private final OptimizationService optimization;
     private final VehiclePositionStore positions;
     private final GpsSimulator simulator;
@@ -85,7 +99,8 @@ public class IncidentService {
 
     public IncidentService(VehicleRepository vehicles, OrderRepository orders,
             DriverRepository drivers, DepotRepository depots, IncidentRepository incidents,
-            IncidentOrderRepository incidentOrders, OptimizationService optimization,
+            IncidentOrderRepository incidentOrders, DispatchPlanRepository dispatchPlans,
+            DispatchStopRepository dispatchStops, OptimizationService optimization,
             VehiclePositionStore positions, GpsSimulator simulator, Clock clock) {
         this.vehicles = vehicles;
         this.orders = orders;
@@ -93,6 +108,8 @@ public class IncidentService {
         this.depots = depots;
         this.incidents = incidents;
         this.incidentOrders = incidentOrders;
+        this.dispatchPlans = dispatchPlans;
+        this.dispatchStops = dispatchStops;
         this.optimization = optimization;
         this.positions = positions;
         this.simulator = simulator;
@@ -154,6 +171,7 @@ public class IncidentService {
             orders.save(order);
             ordersById.put(order.getId(), order);
         }
+        reconcileApprovedPlans(affected);
 
         vehicle.setStatus(VehicleStatus.BROKEN_DOWN);
         vehicles.save(vehicle);
@@ -287,6 +305,32 @@ public class IncidentService {
         incident.setResolvedAt(Instant.now(clock));
         incidents.save(incident);
         return detail(incident);
+    }
+
+    /**
+     * Cancels the live stops of the orders a breakdown just unassigned,
+     * on APPROVED plans only. A stop already DELIVERED or FAILED is
+     * history and stays as it is; a DRAFT plan is a proposal, not live
+     * work, so its stops are left alone. The plan itself keeps its
+     * APPROVED status — the dispatcher can still cancel it, and its
+     * remaining stops are still live — and a plan whose stops are all
+     * cancelled simply has no live stops left for the driver route.
+     */
+    private void reconcileApprovedPlans(List<Order> affected) {
+        for (Order order : affected) {
+            for (DispatchStop stop : dispatchStops.findByOrderId(order.getId())) {
+                if (stop.getStatus() != DispatchStopStatus.PENDING
+                        && stop.getStatus() != DispatchStopStatus.PICKED_UP) {
+                    continue;
+                }
+                DispatchPlan plan = dispatchPlans.findById(stop.getPlanId()).orElse(null);
+                if (plan == null || plan.getStatus() != DispatchPlanStatus.APPROVED) {
+                    continue;
+                }
+                stop.setStatus(DispatchStopStatus.CANCELLED);
+                dispatchStops.save(stop);
+            }
+        }
     }
 
     private Incident getIncident(UUID id) {

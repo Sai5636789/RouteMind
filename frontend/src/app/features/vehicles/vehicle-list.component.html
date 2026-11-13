@@ -45,21 +45,23 @@
               }
             }
           </span>
-          <button
-            mat-raised-button
-            color="primary"
-            (click)="reroute(incident)"
-            [disabled]="reroutingId() === incident.id"
-          >
-            {{ reroutingId() === incident.id ? 'Rerouting…' : 'Reroute orders' }}
-          </button>
-          <button
-            mat-button
-            (click)="resolve(incident)"
-            [disabled]="resolvingId() === incident.id"
-          >
-            {{ resolvingId() === incident.id ? 'Resolving…' : 'Resolve' }}
-          </button>
+          <span class="incident-actions">
+            <button
+              mat-raised-button
+              color="primary"
+              (click)="reroute(incident)"
+              [disabled]="reroutingId() === incident.id"
+            >
+              {{ reroutingId() === incident.id ? 'Rerouting…' : 'Reroute orders' }}
+            </button>
+            <button
+              mat-button
+              (click)="resolve(incident)"
+              [disabled]="resolvingId() === incident.id"
+            >
+              {{ resolvingId() === incident.id ? 'Resolving…' : 'Resolve' }}
+            </button>
+          </span>
           @if (rerouteResult(incident); as result) {
             <p
               class="reroute-summary"
