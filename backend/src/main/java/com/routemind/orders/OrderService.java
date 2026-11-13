@@ -10,6 +10,7 @@ import com.routemind.fleet.VehicleRepository;
 import com.routemind.fleet.VehicleStatus;
 import java.math.BigDecimal;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
@@ -170,11 +171,24 @@ public class OrderService {
         order.setStatus(target);
     }
 
+    /**
+     * Returns a vehicle to service only when it has no active orders
+     * left. A multi-stop route delivers its stops one at a time, and
+     * delivering the first stop must not free the vehicle while the
+     * remaining stops are still assigned to it — that was the old
+     * behaviour, and the dispatch workflow depends on the corrected one.
+     */
     private void releaseVehicle(Order order) {
         if (order.getAssignedVehicleId() == null) {
             return;
         }
-        vehicles.findById(order.getAssignedVehicleId()).ifPresent(vehicle -> {
+        UUID vehicleId = order.getAssignedVehicleId();
+        List<Order> stillActive = orders.findByAssignedVehicleIdAndStatusInOrderByCreatedAtAsc(
+                vehicleId, List.of(OrderStatus.ASSIGNED, OrderStatus.IN_TRANSIT));
+        if (!stillActive.isEmpty()) {
+            return;
+        }
+        vehicles.findById(vehicleId).ifPresent(vehicle -> {
             if (vehicle.getStatus() == VehicleStatus.ON_ROUTE) {
                 vehicle.setStatus(VehicleStatus.AVAILABLE);
                 vehicles.save(vehicle);

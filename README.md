@@ -314,6 +314,52 @@ Local development runs the frontend behind the `ng serve` proxy
 the WebSocket all share one origin. The backend sends no CORS headers,
 so calling `localhost:8080` directly from the browser is blocked.
 
+## Dispatch and delivery
+
+The Dispatch page at http://localhost:4200/dispatch (sidebar: Dispatch)
+turns an optimization run into work. Optimization itself assigns
+nothing — dispatch is the step that does:
+
+- **Create plan** runs the optimizer over the current dispatch state
+  (first depot, `AVAILABLE` vehicles, `CREATED` orders) and saves the
+  result as a `DRAFT` plan: one stop per order, in visit order, with the
+  route's measured distance and duration from the matrix the optimizer
+  used. Orders the optimizer could not place stay `CREATED` and are
+  reported on the plan, not silently dropped.
+- **Review and assign drivers** — a dispatcher can set a driver per
+  vehicle route on a `DRAFT` plan. A plan cannot be approved until
+  every route has an active driver.
+- **Approve** assigns the orders (`CREATED` to `ASSIGNED`, with vehicle
+  and driver) and sends the vehicles out (`AVAILABLE` to `ON_ROUTE`).
+  **Reject** ends a draft without touching any order. **Cancel** on an
+  approved plan returns assigned or in-transit orders to `CREATED`,
+  unassigned, and frees vehicles with no other active orders —
+  delivered orders are never touched.
+- **Driver route** — pick a driver to see their current route across
+  approved plans, in visit order, and report each stop: **Pick up**
+  moves the order to `IN_TRANSIT`, **Deliver** delivers it, **Fail**
+  cancels it. When every stop on a plan reaches a terminal state the
+  plan completes.
+
+One fix came with this work: delivering an order used to return its
+vehicle to `AVAILABLE` even when the same vehicle still had other
+stops assigned. A vehicle now returns to service only when it has no
+active orders left, so a multi-stop route stays out until its last
+stop is delivered or failed.
+
+Endpoints: `POST /api/v1/dispatch/plans`
+(`{driverAssignments?: {vehicleId: driverId}}`),
+`GET /api/v1/dispatch/plans?status=`, `GET /api/v1/dispatch/plans/{id}`,
+`POST /api/v1/dispatch/plans/{id}/assign-driver`,
+`POST /api/v1/dispatch/plans/{id}/approve`,
+`POST /api/v1/dispatch/plans/{id}/reject`,
+`POST /api/v1/dispatch/plans/{id}/cancel`,
+`GET /api/v1/dispatch/driver/{driverId}/route`,
+`POST /api/v1/dispatch/stops/{stopId}/delivery` (`{status:
+PICKED_UP | DELIVERED | FAILED}`). Backend:
+`backend/src/main/java/com/routemind/dispatch/` (`DispatchService`,
+`DispatchController`), schema in `V4__dispatch_plans.sql`.
+
 ## Breakdowns and rerouting
 
 When a vehicle breaks down, the dispatcher reports it from the

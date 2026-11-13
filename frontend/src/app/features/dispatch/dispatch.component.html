@@ -1,0 +1,199 @@
+<div class="page-header">
+  <h1 class="page-title">Dispatch</h1>
+  <button mat-raised-button color="primary" (click)="createPlan()">
+    <mat-icon>add</mat-icon>
+    Create plan from optimization
+  </button>
+</div>
+<p class="page-note">
+  A plan is a saved optimization run. It assigns nothing until the dispatcher approves it.
+</p>
+
+<mat-form-field appearance="outline" class="filter">
+  <mat-label>Status</mat-label>
+  <mat-select [value]="statusFilter()" (selectionChange)="onFilter($event.value)">
+    <mat-option value="">All statuses</mat-option>
+    @for (status of statuses; track status) {
+      <mat-option [value]="status">{{ status }}</mat-option>
+    }
+  </mat-select>
+</mat-form-field>
+
+@if (state() === 'loading') {
+  <div class="loading">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Loading dispatch plans…</p>
+  </div>
+} @else if (state() === 'error') {
+  <mat-card class="error-card">
+    <mat-card-header>
+      <mat-card-title>Could not load dispatch plans</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <p>{{ error() }}</p>
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-raised-button color="primary" (click)="load()">Retry</button>
+    </mat-card-actions>
+  </mat-card>
+} @else if (plans().length === 0) {
+  <mat-card class="empty-card">
+    <mat-card-content>
+      <p>No dispatch plans yet. Create one from the current optimization.</p>
+    </mat-card-content>
+  </mat-card>
+} @else {
+  @if (error()) {
+    <p class="inline-error">{{ error() }}</p>
+  }
+  <div class="table-wrap">
+    <table mat-table [dataSource]="plans()" class="mat-elevation-z1">
+      <ng-container matColumnDef="createdAt">
+        <th mat-header-cell *matHeaderCellDef>Created</th>
+        <td mat-cell *matCellDef="let plan">{{ plan.createdAt }}</td>
+      </ng-container>
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef>Status</th>
+        <td mat-cell *matCellDef="let plan">{{ plan.status }}</td>
+      </ng-container>
+      <ng-container matColumnDef="routes">
+        <th mat-header-cell *matHeaderCellDef>Routes / stops</th>
+        <td mat-cell *matCellDef="let plan">
+          {{ plan.routes.length }} routes, {{ stopCount(plan) }} stops
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="distance">
+        <th mat-header-cell *matHeaderCellDef>Distance</th>
+        <td mat-cell *matCellDef="let plan">{{ formatKm(plan.totalDistanceMetres) }}</td>
+      </ng-container>
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let plan">
+          <button mat-button (click)="select(plan)">Review</button>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="planColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: planColumns"></tr>
+    </table>
+    <mat-paginator
+      [length]="total()"
+      [pageIndex]="page()"
+      [pageSize]="pageSize"
+      (page)="onPage($event)"
+    ></mat-paginator>
+  </div>
+}
+
+@if (selected(); as plan) {
+  <mat-card class="plan-card">
+    <mat-card-header>
+      <mat-card-title>Plan {{ plan.id }} — {{ plan.status }}</mat-card-title>
+      <mat-card-subtitle>
+        {{ formatKm(plan.totalDistanceMetres) }} · {{ formatMinutes(plan.totalDurationSeconds) }} ·
+        {{ plan.matrixSource === 'OSRM' ? 'Road routing' : 'Straight-line distances' }}
+        @if (plan.unassignedOrderIds.length > 0) {
+          · {{ plan.unassignedOrderIds.length }} order(s) could not be placed
+        }
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      @for (route of plan.routes; track route.vehicleId) {
+        <div class="route">
+          <h3>
+            {{ route.plateNumber ?? 'Vehicle' }} — {{ formatKm(route.totalDistanceMetres) }},
+            {{ formatMinutes(route.totalDurationSeconds) }}
+          </h3>
+          @if (plan.status === 'DRAFT') {
+            <mat-form-field appearance="outline" class="driver-select">
+              <mat-label>Driver for this route</mat-label>
+              <mat-select
+                [value]="selectedRouteDriver(route)"
+                (selectionChange)="onRouteDriver(route.vehicleId, $event.value)"
+              >
+                @for (driver of drivers(); track driver.id) {
+                  <mat-option [value]="driver.id">
+                    {{ driver.firstName }} {{ driver.lastName }}
+                  </mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          } @else {
+            <p class="driver-line">Driver: {{ driverName(route.driverId) }}</p>
+          }
+          <ol class="stops">
+            @for (stop of route.stops; track stop.stopId) {
+              <li>
+                <span class="stop-customer">{{ stop.customerName ?? 'Order' }}</span>
+                <span class="stop-address">{{ stop.deliveryAddress ?? '' }}</span>
+                <mat-chip>{{ stop.status }}</mat-chip>
+                @if (stop.needsReassignment) {
+                  <mat-chip color="warn">Needs reassignment</mat-chip>
+                }
+              </li>
+            }
+          </ol>
+        </div>
+      }
+    </mat-card-content>
+    <mat-card-actions>
+      @if (plan.status === 'DRAFT') {
+        <button mat-raised-button color="primary" (click)="approve(plan)">Approve</button>
+        <button mat-button color="warn" (click)="reject(plan)">Reject</button>
+      }
+      @if (plan.status === 'APPROVED') {
+        <button mat-button color="warn" (click)="cancel(plan)">Cancel plan</button>
+      }
+    </mat-card-actions>
+  </mat-card>
+}
+
+<mat-card class="driver-card">
+  <mat-card-header>
+    <mat-card-title>Driver route</mat-card-title>
+    <mat-card-subtitle>One driver's current route, in visit order</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <mat-form-field appearance="outline" class="filter">
+      <mat-label>Driver</mat-label>
+      <mat-select [value]="driverFilter()" (selectionChange)="onDriverRoute($event.value)">
+        <mat-option value="">Select a driver</mat-option>
+        @for (driver of drivers(); track driver.id) {
+          <mat-option [value]="driver.id">
+            {{ driver.firstName }} {{ driver.lastName }}
+          </mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    @if (driverRouteState() === 'loading') {
+      <div class="loading">
+        <mat-spinner diameter="32"></mat-spinner>
+      </div>
+    } @else if (driverRouteState() === 'error') {
+      <p class="inline-error">{{ driverRouteError() }}</p>
+    } @else if (driverFilter() && driverRoute().length === 0) {
+      <p>No active route for this driver.</p>
+    } @else if (driverRoute().length > 0) {
+      @if (driverRouteError()) {
+        <p class="inline-error">{{ driverRouteError() }}</p>
+      }
+      <ol class="stops">
+        @for (stop of driverRoute(); track stop.stopId) {
+          <li>
+            <span class="stop-customer">{{ stop.customerName }}</span>
+            <span class="stop-address">{{ stop.deliveryAddress }}</span>
+            <mat-chip>{{ stop.status }}</mat-chip>
+            @if (stop.status === 'PENDING') {
+              <button mat-button (click)="updateDelivery(stop, 'PICKED_UP')">Pick up</button>
+              <button mat-button (click)="updateDelivery(stop, 'DELIVERED')">Deliver</button>
+              <button mat-button color="warn" (click)="updateDelivery(stop, 'FAILED')">Fail</button>
+            }
+            @if (stop.status === 'PICKED_UP') {
+              <button mat-button (click)="updateDelivery(stop, 'DELIVERED')">Deliver</button>
+              <button mat-button color="warn" (click)="updateDelivery(stop, 'FAILED')">Fail</button>
+            }
+          </li>
+        }
+      </ol>
+    }
+  </mat-card-content>
+</mat-card>

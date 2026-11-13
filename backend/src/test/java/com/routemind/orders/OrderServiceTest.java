@@ -14,6 +14,7 @@ import com.routemind.fleet.Vehicle;
 import com.routemind.fleet.VehicleRepository;
 import com.routemind.fleet.VehicleStatus;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,6 +84,37 @@ class OrderServiceTest {
 
         Order delivered = service.deliver(orderId);
         assertThat(delivered.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(vehicle.getStatus()).isEqualTo(VehicleStatus.AVAILABLE);
+    }
+
+    @Test
+    void deliveringFirstStopKeepsVehicleOnRouteUntilLastStopDelivered() {
+        UUID vehicleId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        Order second = new Order("North Pharmacy", "44 North St, Gainesville, FL",
+                29.7000, -82.3000, new BigDecimal("8"));
+        order.setStatus(OrderStatus.IN_TRANSIT);
+        order.setAssignedVehicleId(vehicleId);
+        second.setStatus(OrderStatus.ASSIGNED);
+        second.setAssignedVehicleId(vehicleId);
+        vehicle.setStatus(VehicleStatus.ON_ROUTE);
+        stubSave();
+        stubOrderLookup();
+        when(orders.findById(secondId)).thenReturn(Optional.of(second));
+        when(orders.findByAssignedVehicleIdAndStatusInOrderByCreatedAtAsc(vehicleId,
+                List.of(OrderStatus.ASSIGNED, OrderStatus.IN_TRANSIT)))
+                .thenReturn(List.of(second)).thenReturn(List.of());
+        when(vehicles.findById(vehicleId)).thenReturn(Optional.of(vehicle));
+
+        service.deliver(orderId);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(vehicle.getStatus()).isEqualTo(VehicleStatus.ON_ROUTE);
+
+        // The second stop is still only ASSIGNED, so it must be picked up
+        // before it can be delivered — the state machine applies per order.
+        service.startTransit(secondId);
+        service.deliver(secondId);
+        assertThat(second.getStatus()).isEqualTo(OrderStatus.DELIVERED);
         assertThat(vehicle.getStatus()).isEqualTo(VehicleStatus.AVAILABLE);
     }
 

@@ -547,9 +547,67 @@ Not verified in this VM:
   milestone): the solver ran on the straight-line matrix here; with
   OSRM reachable the same code path takes the `OSRM` matrix instead.
 
-## Dispatch and delivery workflow
+## Dispatch and delivery workflow — completed Nov 13, 2026
 
 Save assignments, dispatcher approval, driver view, delivery status updates.
+
+Backend (`backend/src/main/java/com/routemind/dispatch/`, migration
+`V4__dispatch_plans.sql`): `DispatchPlan` + `DispatchStop` (one stop per
+order, in visit order, with the route's measured distance and duration
+saved on each stop so a plan reads back exactly as the optimizer
+measured it), `DispatchService` (`createPlan` runs
+`OptimizationService.optimizeCurrent` and saves the result as a DRAFT
+plan that assigns nothing; `assignDriver` per vehicle route on a DRAFT
+plan; `approve` validates every route has an active driver, every
+vehicle is AVAILABLE and every order is still CREATED, then assigns the
+orders and sends the vehicles ON_ROUTE; `reject` ends a draft untouched;
+`cancel` returns assigned/in-transit orders to CREATED and frees idle
+vehicles; `driverRoute` lists a driver's stops on APPROVED plans in
+visit order; `updateDelivery` moves stops through PICKED_UP, DELIVERED
+or FAILED via `OrderService`, so the order state machine stays the
+single source of truth, and completes the plan when every stop is
+terminal), `DispatchController` (`POST /api/v1/dispatch/plans`,
+`GET /plans`, `GET /plans/{id}`, `POST /plans/{id}/assign-driver`,
+`/approve`, `/reject`, `/cancel`, `GET /driver/{driverId}/route`,
+`POST /stops/{stopId}/delivery`). All endpoints require the dispatcher
+login, like every other endpoint except health and login.
+
+One real bug fixed along the way: `OrderService` used to return a
+vehicle to AVAILABLE when any one of its orders was delivered, even
+when the same vehicle still had other stops assigned. A vehicle now
+returns to service only when it has no ASSIGNED or IN_TRANSIT orders
+left, so a multi-stop route stays out until its last stop is delivered
+or failed. Covered by a new `OrderServiceTest` case.
+
+Frontend (`frontend/src/app/features/dispatch/`): Dispatch page with a
+plan list (status filter, pagination), Create plan from optimization,
+plan review with per-route driver selection, Approve / Reject / Cancel,
+and a driver route view with Pick up / Deliver / Fail actions per stop.
+Sidebar gains a Dispatch entry.
+
+- Tests: `DispatchServiceTest` (10: create/approve/reject/cancel,
+  driver-required approval, delivery flow completing the plan, failed
+  delivery, delivery on a draft plan, driver route),
+  `DispatchControllerTest` (7), plus the multi-stop vehicle-release
+  case in `OrderServiceTest`. Full backend suite: 161 tests, 154 pass;
+  the 7 failures are the known sandbox limits (3
+  `RouteMindApplicationTests` need live Postgres + Redis, 4
+  `OsrmClientTest` need JVM TCP to a localhost stub server). Frontend:
+  62/62 tests pass (3 new dispatch component tests), production build
+  passes.
+- Not verified in this VM: the dispatch flow against the real backend
+  on Postgres + Redis, and the live OSRM matrix end to end — the backend
+  cannot boot here and `docker compose up` is blocked. The flow is
+  covered by service and controller tests instead; verify on a real
+  machine with `docker compose up --build`, sign in as
+  `dispatcher` / `changeme`, and work a plan through on the Dispatch
+  page.
+- Known limitation: if a vehicle on an APPROVED plan breaks down, the
+  incident flow unassigns its orders and flags them, but the plan's
+  stops are not updated to match — the stop still shows its order's
+  live status (CREATED, flagged) in the plan detail, and the driver
+  route no longer lists it as assigned. The next dispatch work should
+  reconcile plan stops when an incident lands.
 
 ## Incidents and integration testing — completed Nov 13, 2026
 
