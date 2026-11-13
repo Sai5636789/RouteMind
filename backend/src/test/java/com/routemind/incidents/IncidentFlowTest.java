@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 import com.routemind.common.ConflictException;
 import com.routemind.depot.Depot;
 import com.routemind.depot.DepotRepository;
+import com.routemind.dispatch.DispatchPlanRepository;
+import com.routemind.dispatch.DispatchStopRepository;
 import com.routemind.fleet.Driver;
 import com.routemind.fleet.DriverRepository;
 import com.routemind.fleet.DriverStatus;
@@ -79,6 +81,10 @@ class IncidentFlowTest {
     @Mock
     private IncidentOrderRepository incidentOrders;
     @Mock
+    private DispatchPlanRepository dispatchPlans;
+    @Mock
+    private DispatchStopRepository dispatchStops;
+    @Mock
     private OptimizationService optimization;
     @Mock
     private VehiclePositionStore positions;
@@ -102,7 +108,7 @@ class IncidentFlowTest {
                 new TrackingProperties(true, 5_000, 40.0), CLOCK);
         orderService = new OrderService(orders, vehicles, drivers);
         incidentService = new IncidentService(vehicles, orders, drivers, depots, incidents,
-                incidentOrders, optimization, positions, simulator, CLOCK);
+                incidentOrders, dispatchPlans, dispatchStops, optimization, positions, simulator, CLOCK);
         when(depots.findAll()).thenReturn(List.of(
                 new Depot(UUID.randomUUID(), "Gainesville Depot", "Gainesville, FL",
                         29.6516, -82.3248, NOW, NOW)));

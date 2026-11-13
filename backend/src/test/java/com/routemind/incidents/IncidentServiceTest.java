@@ -10,6 +10,12 @@ import com.routemind.common.ConflictException;
 import com.routemind.common.ResourceNotFoundException;
 import com.routemind.depot.Depot;
 import com.routemind.depot.DepotRepository;
+import com.routemind.dispatch.DispatchPlan;
+import com.routemind.dispatch.DispatchPlanRepository;
+import com.routemind.dispatch.DispatchPlanStatus;
+import com.routemind.dispatch.DispatchStop;
+import com.routemind.dispatch.DispatchStopRepository;
+import com.routemind.dispatch.DispatchStopStatus;
 import com.routemind.fleet.Driver;
 import com.routemind.fleet.DriverRepository;
 import com.routemind.fleet.DriverStatus;
@@ -58,6 +64,10 @@ class IncidentServiceTest {
     @Mock
     private IncidentOrderRepository incidentOrders;
     @Mock
+    private DispatchPlanRepository dispatchPlans;
+    @Mock
+    private DispatchStopRepository dispatchStops;
+    @Mock
     private OptimizationService optimization;
     @Mock
     private VehiclePositionStore positions;
@@ -75,7 +85,7 @@ class IncidentServiceTest {
 
     private IncidentService serviceWithClock() {
         return new IncidentService(vehicles, orders, drivers, depots, incidents, incidentOrders,
-                optimization, positions, simulator, CLOCK);
+                dispatchPlans, dispatchStops, optimization, positions, simulator, CLOCK);
     }
 
     /** Entities get their id on persist; the service reads it, so the test sets it directly. */
@@ -151,6 +161,46 @@ class IncidentServiceTest {
                 .containsExactly(OrderStatus.ASSIGNED, OrderStatus.IN_TRANSIT);
         verify(positions).remove(VEHICLE_ID);
         verify(simulator).clearRoute(VEHICLE_ID);
+    }
+
+    @Test
+    void breakdownCancelsLiveStopsOnApprovedPlanOnly() {
+        UUID approvedPlanId = UUID.fromString("00000000-0000-0000-0000-000000000010");
+        UUID draftPlanId = UUID.fromString("00000000-0000-0000-0000-000000000011");
+        Vehicle vehicle = onRouteVehicle();
+        Order assigned = activeOrder(ORDER_ID, OrderStatus.ASSIGNED);
+        Order inTransit = activeOrder(ORDER2_ID, OrderStatus.IN_TRANSIT);
+        DispatchPlan approved = new DispatchPlan(UUID.randomUUID(), "STRAIGHT_LINE", 4200, 378, 10);
+        approved.setStatus(DispatchPlanStatus.APPROVED);
+        setId(approved, approvedPlanId);
+        DispatchPlan draft = new DispatchPlan(UUID.randomUUID(), "STRAIGHT_LINE", 4200, 378, 10);
+        setId(draft, draftPlanId);
+        DispatchStop liveStop = new DispatchStop(approvedPlanId, VEHICLE_ID, DRIVER_ID,
+                ORDER_ID, 0, 4200, 378);
+        DispatchStop deliveredStop = new DispatchStop(approvedPlanId, VEHICLE_ID, DRIVER_ID,
+                ORDER2_ID, 1, 4200, 378);
+        deliveredStop.setStatus(DispatchStopStatus.DELIVERED);
+        DispatchStop draftStop = new DispatchStop(draftPlanId, VEHICLE_ID, DRIVER_ID,
+                ORDER_ID, 0, 4200, 378);
+        when(vehicles.findById(VEHICLE_ID)).thenReturn(Optional.of(vehicle));
+        when(incidents.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orders.findByAssignedVehicleIdAndStatusInOrderByCreatedAtAsc(any(), any()))
+                .thenReturn(List.of(assigned, inTransit));
+        when(incidentOrders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(vehicles.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(dispatchStops.findByOrderId(ORDER_ID)).thenReturn(List.of(liveStop, draftStop));
+        when(dispatchStops.findByOrderId(ORDER2_ID)).thenReturn(List.of(deliveredStop));
+        when(dispatchPlans.findById(approvedPlanId)).thenReturn(Optional.of(approved));
+        when(dispatchPlans.findById(draftPlanId)).thenReturn(Optional.of(draft));
+        when(dispatchStops.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        serviceWithClock().reportBreakdown(VEHICLE_ID, "Engine failure");
+
+        assertThat(liveStop.getStatus()).isEqualTo(DispatchStopStatus.CANCELLED);
+        assertThat(deliveredStop.getStatus()).isEqualTo(DispatchStopStatus.DELIVERED);
+        assertThat(draftStop.getStatus()).isEqualTo(DispatchStopStatus.PENDING);
+        verify(dispatchStops).save(liveStop);
     }
 
     @Test

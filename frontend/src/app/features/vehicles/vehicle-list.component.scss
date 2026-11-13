@@ -108,6 +108,17 @@ table {
   color: rgba(0, 0, 0, 0.6);
 }
 
+/* The two actions stay together on one line: before this they were
+   loose flex items in the wrapping row, so Resolve dropped to its own
+   line whenever the "— rerouted" text made the row long. */
+.incident-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .reroute-summary {
   width: 100%;
   margin: 4px 0 0;

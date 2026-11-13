@@ -253,6 +253,12 @@ public class DispatchService {
         for (DispatchPlan plan : approved) {
             Map<UUID, Vehicle> vehiclesById = vehiclesById(plan);
             for (DispatchStop stop : stops.findByDriverIdAndPlanIdOrderByStopIndexAsc(driverId, plan.getId())) {
+                // A stop a breakdown cancelled is no longer the driver's
+                // work — it stays on the plan as a record, but it is not
+                // on anyone's route any more.
+                if (stop.getStatus() == DispatchStopStatus.CANCELLED) {
+                    continue;
+                }
                 Order order = orders.findById(stop.getOrderId()).orElseThrow();
                 Vehicle vehicle = vehiclesById.get(stop.getVehicleId());
                 route.add(new DispatchPlanResponse.DriverStopView(plan.getId(), stop.getId(),

@@ -61,9 +61,9 @@ frontend/   Angular dashboard
 docker-compose.yml
 ```
 
-Backend packages (added as the features land): `health`, `common` (shared
-error shape), `config`, then `fleet`, `orders`, `tracking`, `dispatch`,
-`optimization`, `incidents`, `simulation`, `analytics`.
+Backend packages, one per domain area: `health`, `common` (shared
+error shape), `config`, `fleet`, `orders`, `tracking`, `routing`,
+`optimization`, `dispatch`, `incidents`, `auth`, `depot`.
 
 ## Authentication
 
@@ -149,6 +149,25 @@ totalElements, totalPages}`. Errors always use one shape:
 | `POST /api/v1/orders/{id}/deliver` | IN_TRANSIT → DELIVERED, vehicle returns to AVAILABLE |
 | `POST /api/v1/orders/{id}/cancel` | CREATED/ASSIGNED → CANCELLED, vehicle released |
 | `DELETE /api/v1/orders/{id}` | Delete an order (204; only CREATED or CANCELLED) |
+| `GET /api/v1/tracking/vehicles` | Latest tracked position per vehicle |
+| `GET /api/v1/tracking/vehicles/{id}` | Latest tracked position for one vehicle |
+| `GET /api/v1/tracking/vehicles/nearby` | Vehicles near a point (`?latitude&longitude&radiusKm`) |
+| `POST /api/v1/routing/route` | Road geometry through 2–25 waypoints (503 when the router is down) |
+| `POST /api/v1/routing/matrix` | Travel-time / distance matrix (503 when the router is down) |
+| `GET /api/v1/routing/status` | Whether the road router answers |
+| `POST /api/v1/optimization/optimize-current` | Optimize over the current dispatch state |
+| `POST /api/v1/optimization/compare-current` | Optimized plan next to the creation-order plan, with savings |
+| `POST /api/v1/optimization/optimize` | Optimize an explicit depot / vehicle / order set |
+| `POST /api/v1/optimization/compare` | Compare an explicit set against creation order |
+| `POST /api/v1/dispatch/plans` | Save the current optimization as a DRAFT plan |
+| `GET /api/v1/dispatch/plans?status=` | List plans, optionally filtered by status |
+| `GET /api/v1/dispatch/plans/{id}` | Get one plan, with its routes and stops |
+| `POST /api/v1/dispatch/plans/{id}/assign-driver` | Set a driver for one vehicle's route on a DRAFT plan |
+| `POST /api/v1/dispatch/plans/{id}/approve` | Approve a DRAFT plan: assign its orders, send vehicles out |
+| `POST /api/v1/dispatch/plans/{id}/reject` | Reject a DRAFT plan, touching nothing |
+| `POST /api/v1/dispatch/plans/{id}/cancel` | Cancel an APPROVED plan, returning live orders to CREATED |
+| `GET /api/v1/dispatch/driver/{driverId}/route` | A driver's stops across APPROVED plans, in visit order |
+| `POST /api/v1/dispatch/stops/{stopId}/delivery` | Report a stop: `PICKED_UP`, `DELIVERED`, or `FAILED` |
 
 Orders carry `needsReassignment`: true while an order waits for a new
 vehicle after a breakdown took its previous one. It is set only by the
@@ -405,6 +424,70 @@ Endpoints: `POST /api/v1/incidents` (`{vehicleId, reason?}`),
 `backend/src/main/java/com/routemind/incidents/` (`IncidentService`,
 `IncidentController`), schema in `V3__incidents_and_broken_down.sql`.
 
+## Sample demo data
+
+A fresh database is not empty: Flyway migration
+`V5__sample_demo_dataset.sql` seeds the demo fleet on first boot, so
+the walkthrough below works the moment the stack is up.
+
+- **Depot:** Gainesville Depot (29.6516, -82.3248), seeded by V1.
+- **Vehicles:** 8, `VAN-001` to `VAN-008`, capacities 100–300 kg, all
+  `AVAILABLE`.
+- **Drivers:** 8, all `ACTIVE`.
+- **Orders:** 24, all `CREATED` and unassigned, at real Gainesville
+  locations (campus, Butler Plaza, Archer Road, the malls, the
+  clinics), 11–40 kg each, 550 kg in total — more than any one vehicle
+  carries, so the optimizer has to split the work across the fleet.
+
+Nothing is pre-assigned: creating the plan, approving it, and working
+the deliveries is still the dispatcher's job, which is the point of
+the demo. To start over, drop the volumes and start again
+(`docker compose down -v && docker compose up --build`); Flyway
+applies V1–V5 on first boot.
+
+## Demo walkthrough
+
+The full loop, about 10 minutes on a machine with Docker:
+
+1. **Start and sign in.** `docker compose up --build`, open
+   http://localhost:4200, sign in as `dispatcher` / `changeme`.
+   (Change the credentials in `.env` before any shared deployment.)
+2. **Check the fleet.** Overview shows 8 vehicles, 8 drivers,
+   24 created orders. Vehicles, Drivers and Orders pages list the
+   seeded data; try a status filter.
+3. **Optimize.** Open the Fleet map and press **Optimize routes**.
+   The summary shows the optimized totals against the creation-order
+   totals, per-vehicle stops in visit order, and any unassigned
+   orders, plus which matrix was used (`OSRM` or `STRAIGHT_LINE`).
+   **Clear optimized plan** returns the map to creation order.
+4. **Create a plan.** On the Dispatch page, **Create plan** saves the
+   optimization as a `DRAFT` plan — nothing is assigned yet.
+5. **Assign drivers and approve.** On the plan, set a driver per
+   vehicle route, then **Approve**. The orders become `ASSIGNED` and
+   the vehicles go `ON_ROUTE`.
+6. **Track live.** Back on the Fleet map, the vehicles move along
+   their routes as the GPS simulator advances them (5 s ticks,
+   40 km/h by default); the status chip says Live tracking, Snapshot,
+   or Tracking offline depending on the socket.
+7. **Break down and reroute.** On the Vehicles page, report a
+   breakdown on an on-route vehicle. Its orders unassign, flag
+   **Needs reassignment**, and the plan's live stops for them are
+   cancelled so the plan matches — delivered stops are untouched.
+   **Reroute orders** runs the optimizer over the flagged orders and
+   the available vehicles; **Resolve** returns the repaired vehicle
+   to service.
+8. **Deliver.** Pick a driver on the Dispatch page to see their
+   route, and report each stop: **Pick up**, then **Deliver** (or
+   **Fail**). When every stop on a plan is terminal the plan
+   completes; its vehicles return to `AVAILABLE` once they have no
+   active orders left.
+9. **Road routing (optional).** For real road geometry instead of
+   direct lines, run `./scripts/setup-osrm-data.sh` once (Florida
+   extract, ~500 MB download, ~2 GB of data), then start with
+   `docker compose --profile routing up --build`. Without it the map
+   draws direct lines and says so — that is the expected fallback,
+   not a failure.
+
 ## Tests
 
 Backend (MockMvc slices, service unit tests, and a service-level flow
@@ -432,6 +515,11 @@ npm run build   # production build
 
 ## Development plan
 
-See [PROGRESS.md](PROGRESS.md). Target for the finished MVP: 5–10 simulated
-vehicles, 20–50 orders, live Redis tracking, and at least one verified
-OR-Tools optimization.
+See [PROGRESS.md](PROGRESS.md). The finished MVP ships with the
+seeded demo dataset (8 vehicles, 24 orders), live Redis tracking, and
+a verified OR-Tools optimization: on the 2-vehicle, 6-order scenario
+the optimizer saved 19.5 km (39.3%) against creation order — see
+PROGRESS.md for the measured numbers. What is still not verified on a
+real machine is the full `docker compose up` run with live OSRM end
+to end; the sandbox it was built in blocks Docker and the JVM's
+outbound TCP, so that first live run is issue #12.
