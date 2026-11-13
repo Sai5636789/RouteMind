@@ -1,6 +1,6 @@
 // Karma configuration for the dashboard unit tests.
 // ChromeHeadlessNoSandbox exists for CI/sandbox containers that run as
-// root, where Chrome refuses to start without --no-sandbox.
+// root, where Chrome refuses to start without the no-sandbox flag.
 module.exports = function (config) {
   config.set({
     basePath: '',

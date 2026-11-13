@@ -1,0 +1,32 @@
+.login-page {
+  display: flex;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+.login-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--mat-sys-error);
+  font-size: 14px;
+}
+
+button mat-spinner {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 8px;
+}

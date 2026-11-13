@@ -1,8 +1,8 @@
--- Fleet and orders: the dispatcher registers vehicles and drivers, then
--- creates delivery orders that are later assigned, routed and delivered.
--- Delivery position is stored as plain latitude/longitude columns; the
--- geography point used by routing is derived from them when needed, so
--- this migration does not depend on PostGIS functions at insert time.
+/* Fleet and orders: the dispatcher registers vehicles and drivers, then
+   creates delivery orders that are later assigned, routed and delivered.
+   Delivery position is stored as plain latitude/longitude columns; the
+   geography point used by routing is derived from them when needed, so
+   this migration does not depend on PostGIS functions at insert time. */
 
 CREATE TABLE vehicles (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -47,8 +47,8 @@ CREATE TABLE orders (
     CONSTRAINT orders_latitude_valid CHECK (latitude BETWEEN -90 AND 90),
     CONSTRAINT orders_longitude_valid CHECK (longitude BETWEEN -180 AND 180),
     CONSTRAINT orders_status_valid CHECK (status IN ('CREATED', 'ASSIGNED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED')),
-    -- An order is either unassigned, or assigned to both a vehicle and a
-    -- driver. Half-assigned orders cannot be dispatched or tracked.
+    /* An order is either unassigned, or assigned to both a vehicle and a
+       driver. Half-assigned orders cannot be dispatched or tracked. */
     CONSTRAINT orders_assignment_complete CHECK (
         (assigned_vehicle_id IS NULL AND assigned_driver_id IS NULL)
         OR (assigned_vehicle_id IS NOT NULL AND assigned_driver_id IS NOT NULL)

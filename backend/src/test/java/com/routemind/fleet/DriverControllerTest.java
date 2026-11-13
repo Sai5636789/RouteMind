@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.routemind.common.ConflictException;
+import com.routemind.auth.JwtService;
 import com.routemind.config.SecurityConfig;
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +30,11 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import(SecurityConfig.class)
 @WithMockUser
 class DriverControllerTest {
+
+    // SecurityConfig builds its JWT filter from JwtService; the mock
+    // keeps the slice focused on the controller, not on token parsing.
+    @MockitoBean
+    private JwtService jwtService;
 
     @Autowired
     private MockMvc mockMvc;

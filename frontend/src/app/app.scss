@@ -43,6 +43,15 @@
   font-weight: 600;
 }
 
+.toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.toolbar-user {
+  font-size: 14px;
+  margin-right: 4px;
+}
+
 .content {
   max-width: 1200px;
   margin: 0 auto;

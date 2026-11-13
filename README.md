@@ -65,16 +65,55 @@ Backend packages (added as the features land): `health`, `common` (shared
 error shape), `config`, then `fleet`, `orders`, `tracking`, `dispatch`,
 `optimization`, `incidents`, `simulation`, `analytics`.
 
+## Authentication
+
+Every API endpoint except the health probes and login requires a JWT.
+Sign in at http://localhost:4200/login (the dashboard redirects there
+whenever a session is missing or expired) or call the API directly:
+
+```http
+POST /api/v1/auth/login
+{"username": "dispatcher", "password": "changeme"}
+→ {"token": "<jwt>", "tokenType": "Bearer", "expiresInSeconds": 28800, "username": "dispatcher"}
+```
+
+Send the token back as `Authorization: Bearer <token>` on every other
+request. Tokens expire after 8 hours by default (`JWT_TOKEN_TTL`); there
+is no refresh flow — sign in again. Logging out just discards the token
+client-side; tokens are stateless, so there is nothing to revoke.
+
+The live vehicle feed (`/ws`) authenticates the same way: the dashboard
+passes the token as a `?token=` query parameter on the WebSocket
+handshake, because browsers cannot set an Authorization header there.
+The handshake is rejected without a valid token, and the map falls back
+to its authenticated HTTP snapshot poll.
+
+There is exactly one account — the seeded dispatcher — and no user
+management, roles, or registration. The local-development credentials
+are username `dispatcher`, password `changeme`. **Change both before
+any shared deployment:**
+
+```bash
+# in .env (see .env.example)
+DISPATCHER_USERNAME=dispatcher
+DISPATCHER_PASSWORD=<a long random password>
+JWT_SECRET=<at least 32 random characters>
+```
+
+`JWT_SECRET` signs the tokens — anyone holding it can forge them, so it
+must also change. The backend logs a warning while either default is in
+use, and refuses to start with a JWT secret shorter than 32 characters.
+Rotating the account is a restart: change the variables and restart the
+backend (the password is BCrypt-hashed in memory at startup, never
+stored or logged).
+
 ## API
 
-TEMPORARY, local-demo only: read (GET) endpoints are public so the
-dashboard and fleet map can load data before authentication lands.
-Every write and lifecycle action still requires authentication; the
-token mechanism lands with the authentication feature, and when it
-does, the temporary public reads must be removed (see `SecurityConfig`).
-List endpoints are paginated (`?page=0&size=20&sort=createdAt,desc`) and
-return `{content, page, size, totalElements, totalPages}`. Errors always use
-one shape: `{timestamp, status, error, message, path}`.
+All endpoints except the health probes and `POST /api/v1/auth/login`
+require a Bearer token. List endpoints are paginated
+(`?page=0&size=20&sort=createdAt,desc`) and return `{content, page, size,
+totalElements, totalPages}`. Errors always use one shape:
+`{timestamp, status, error, message, path}`.
 
 | Endpoint | Description |
 | --- | --- |
@@ -128,8 +167,9 @@ http://localhost:4200:
   cancel.
 
 Every page has honest loading, empty, and error states. If the API
-cannot be reached, or answers 401 because authentication has not landed
-yet, the page says so and offers a retry — it never shows invented data.
+cannot be reached, or answers 401 because the session expired, the page
+says so and offers a retry — it never shows invented data. A 401 sends
+the dispatcher back to the login page.
 
 ## Fleet map
 

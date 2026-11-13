@@ -36,6 +36,22 @@ spring:
       timeout: 2s
 
 routemind:
+  auth:
+    # JWT signing secret. Anyone holding it can forge tokens, so change it
+    # in every non-local environment via JWT_SECRET (see .env.example).
+    # Must be at least 32 characters; the app refuses to start with a
+    # shorter one and logs a warning while the default below is in use.
+    # The default is a local-development value only.
+    jwt-secret: ${JWT_SECRET:routemind-dev-secret-change-me-before-any-shared-deployment-0123456789}
+    # How long a login token stays valid.
+    token-ttl: ${JWT_TOKEN_TTL:8h}
+    # The single seeded dispatcher account. There is no user management:
+    # one dispatcher signs in to the dashboard, and that is the whole
+    # account model. Change the password via DISPATCHER_PASSWORD; the
+    # default below is a local-development value only (see README,
+    # Authentication).
+    dispatcher-username: ${DISPATCHER_USERNAME:dispatcher}
+    dispatcher-password: ${DISPATCHER_PASSWORD:changeme}
   routing:
     # Self-hosted OSRM (docker-compose service `osrm`). The router is
     # optional: when it is disabled or unreachable, routing endpoints

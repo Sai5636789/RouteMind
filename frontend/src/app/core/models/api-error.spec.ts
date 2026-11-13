@@ -17,9 +17,9 @@ describe('apiErrorMessage', () => {
     ).toContain('The RouteMind API is not answering');
   });
 
-  it('says sign-in is required for a 401', () => {
+  it('says the session expired for a 401', () => {
     expect(apiErrorMessage(new HttpErrorResponse({ status: 401 }))).toContain(
-      'Sign-in is required',
+      'Your session has expired or you are not signed in',
     );
   });
 
