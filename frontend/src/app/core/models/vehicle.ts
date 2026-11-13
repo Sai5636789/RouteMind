@@ -1,4 +1,4 @@
-export type VehicleStatus = 'AVAILABLE' | 'ON_ROUTE' | 'MAINTENANCE' | 'OUT_OF_SERVICE';
+export type VehicleStatus = 'AVAILABLE' | 'ON_ROUTE' | 'MAINTENANCE' | 'OUT_OF_SERVICE' | 'BROKEN_DOWN';
 
 export interface Vehicle {
   id: string;
@@ -24,6 +24,19 @@ export interface VehicleUpdate extends VehicleCreate {
 }
 
 export const VEHICLE_STATUSES: VehicleStatus[] = [
+  'AVAILABLE',
+  'ON_ROUTE',
+  'MAINTENANCE',
+  'OUT_OF_SERVICE',
+  'BROKEN_DOWN',
+];
+
+/**
+ * Statuses a dispatcher may pick in the vehicle form. BROKEN_DOWN is
+ * not here on purpose: only the incident flow sets it, when a breakdown
+ * is reported, so the form can never create a breakdown without one.
+ */
+export const EDITABLE_VEHICLE_STATUSES: VehicleStatus[] = [
   'AVAILABLE',
   'ON_ROUTE',
   'MAINTENANCE',

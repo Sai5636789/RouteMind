@@ -52,6 +52,14 @@ public class Order extends AuditableEntity {
     @Column(name = "assigned_driver_id")
     private UUID assignedDriverId;
 
+    /**
+     * True while the order is waiting for a new vehicle after a
+     * breakdown took its previous one. Set only by the incident flow,
+     * cleared when the order is reassigned or cancelled.
+     */
+    @Column(name = "needs_reassignment", nullable = false)
+    private boolean needsReassignment = false;
+
     protected Order() {
     }
 
@@ -130,5 +138,13 @@ public class Order extends AuditableEntity {
 
     public void setAssignedDriverId(UUID assignedDriverId) {
         this.assignedDriverId = assignedDriverId;
+    }
+
+    public boolean isNeedsReassignment() {
+        return needsReassignment;
+    }
+
+    public void setNeedsReassignment(boolean needsReassignment) {
+        this.needsReassignment = needsReassignment;
     }
 }

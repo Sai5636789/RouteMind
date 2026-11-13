@@ -125,8 +125,13 @@ totalElements, totalPages}`. Errors always use one shape:
 | `GET /api/v1/vehicles/{id}` | Get one vehicle |
 | `POST /api/v1/vehicles` | Register a vehicle (201) |
 | `PUT /api/v1/vehicles/{id}` | Replace a vehicle |
-| `PATCH /api/v1/vehicles/{id}/status` | Change vehicle status |
+| `PATCH /api/v1/vehicles/{id}/status` | Change vehicle status — never to `BROKEN_DOWN`, and never while the vehicle is broken down (see below) |
 | `DELETE /api/v1/vehicles/{id}` | Delete a vehicle (204; not while on a route) |
+| `POST /api/v1/incidents` | Report a breakdown (201): vehicle → `BROKEN_DOWN`, its active orders unassigned and flagged |
+| `GET /api/v1/incidents?status=` | List incidents, optionally filtered by status |
+| `GET /api/v1/incidents/{id}` | Get one incident, with its affected orders |
+| `POST /api/v1/incidents/{id}/reroute` | Reroute the incident's flagged orders with the optimizer; returns the plan, the saved assignments, and the orders still waiting |
+| `POST /api/v1/incidents/{id}/resolve` | Return the vehicle to service (incident `RESOLVED`) |
 | `GET /api/v1/drivers?status=` | List drivers, optionally filtered by status |
 | `GET /api/v1/drivers/{id}` | Get one driver |
 | `POST /api/v1/drivers` | Register a driver (201) |
@@ -144,6 +149,14 @@ totalElements, totalPages}`. Errors always use one shape:
 | `POST /api/v1/orders/{id}/deliver` | IN_TRANSIT → DELIVERED, vehicle returns to AVAILABLE |
 | `POST /api/v1/orders/{id}/cancel` | CREATED/ASSIGNED → CANCELLED, vehicle released |
 | `DELETE /api/v1/orders/{id}` | Delete an order (204; only CREATED or CANCELLED) |
+
+Orders carry `needsReassignment`: true while an order waits for a new
+vehicle after a breakdown took its previous one. It is set only by the
+breakdown, and cleared when the order is reassigned (by a reroute or by
+hand) or cancelled. `BROKEN_DOWN` is a vehicle status set only by
+reporting a breakdown; the generic status endpoints refuse to set it or
+to move a broken-down vehicle anywhere — only resolving the open
+incident returns the vehicle to service.
 
 ## Configuration
 
@@ -300,6 +313,76 @@ Local development runs the frontend behind the `ng serve` proxy
 (`proxy.conf.json`, wired into `npm start`), so the app, the API and
 the WebSocket all share one origin. The backend sends no CORS headers,
 so calling `localhost:8080` directly from the browser is blocked.
+
+## Breakdowns and rerouting
+
+When a vehicle breaks down, the dispatcher reports it from the
+Vehicles page (the car-crash button on an available or on-route
+vehicle) with an optional reason. Reporting a breakdown:
+
+- takes the vehicle out of service immediately, even mid-route, as
+  `BROKEN_DOWN` — the generic status endpoints refuse this on purpose,
+  so a breakdown always leaves an incident record;
+- unassigns every active order on the vehicle (`ASSIGNED` or
+  `IN_TRANSIT`), returns them to `CREATED`, and flags them
+  (`needsReassignment: true`) — delivered and cancelled orders are
+  never touched;
+- stops live tracking honestly: the simulator only moves `ON_ROUTE`
+  vehicles, so the broken-down vehicle stops moving on its own, and
+  its stored last-known position is removed and its in-progress
+  simulated route dropped, so the map never shows it sitting at a
+  stale position as if it were still on its route. On the fleet map a
+  broken-down vehicle is listed in the side panel instead of being
+  parked at the depot — it broke down on its route, not at the depot.
+
+**Reroute** (on the open incident, Vehicles page) re-runs the real
+OR-Tools optimizer over only the incident's flagged orders and only
+the vehicles that are `AVAILABLE` right now. The optimizer decides the
+assignment and visit order; the reroute applies it — each placed order
+is assigned to its new vehicle and an active driver and set to
+`ASSIGNED`, the new vehicles go `ON_ROUTE`, and the new plan shows on
+the fleet map because the assignments are saved. Orders the optimizer
+could not place stay `CREATED` and flagged, and the summary reports
+them as still waiting instead of dropping them. The incident records
+which vehicle each affected order was rerouted to.
+
+**Resolve** returns the repaired vehicle to `AVAILABLE`. Orders still
+waiting stay flagged — repairing the vehicle does not deliver them,
+and a reroute (or a manual assignment from the Orders page, which also
+clears the flag) is still their way out. A resolved incident cannot be
+rerouted again.
+
+Endpoints: `POST /api/v1/incidents` (`{vehicleId, reason?}`),
+`GET /api/v1/incidents?status=OPEN`, `GET /api/v1/incidents/{id}`,
+`POST /api/v1/incidents/{id}/reroute`,
+`POST /api/v1/incidents/{id}/resolve`. Backend:
+`backend/src/main/java/com/routemind/incidents/` (`IncidentService`,
+`IncidentController`), schema in `V3__incidents_and_broken_down.sql`.
+
+## Tests
+
+Backend (MockMvc slices, service unit tests, and a service-level flow
+test with in-memory repositories — no live database needed for these):
+
+```sh
+cd backend
+mvn test
+```
+
+`RouteMindApplicationTests` is the one exception: it boots the full
+context against Postgres + Redis, so run it with the stack up
+(`docker compose up` first) and skip it otherwise
+(`mvn test -Dtest='!RouteMindApplicationTests'`). `OsrmClientTest`
+needs loopback TCP from the JVM; in a sandbox that blocks it, its
+stub-server tests fail for environmental reasons, not code reasons.
+
+Frontend (Karma + Jasmine, headless Chrome):
+
+```sh
+cd frontend
+npm test        # watch=false in CI: npx ng test --watch=false
+npm run build   # production build
+```
 
 ## Development plan
 

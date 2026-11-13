@@ -66,6 +66,41 @@ class VehicleServiceTest {
     }
 
     @Test
+    void updateToBrokenDownThrowsConflict() {
+        UUID id = UUID.randomUUID();
+        Vehicle vehicle = new Vehicle("ABC-123", "Ford Transit", new BigDecimal("1200.50"), null);
+        when(vehicles.findById(id)).thenReturn(Optional.of(vehicle));
+
+        assertThatThrownBy(() -> service.update(id, "ABC-123", "Ford Transit",
+                new BigDecimal("1200.50"), VehicleStatus.BROKEN_DOWN, null))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("/api/v1/incidents");
+    }
+
+    @Test
+    void changeStatusToBrokenDownThrowsConflict() {
+        UUID id = UUID.randomUUID();
+        Vehicle vehicle = new Vehicle("ABC-123", "Ford Transit", new BigDecimal("1200.50"), null);
+        when(vehicles.findById(id)).thenReturn(Optional.of(vehicle));
+
+        assertThatThrownBy(() -> service.changeStatus(id, VehicleStatus.BROKEN_DOWN))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("/api/v1/incidents");
+    }
+
+    @Test
+    void changeStatusOfBrokenDownVehicleThrowsConflict() {
+        UUID id = UUID.randomUUID();
+        Vehicle vehicle = new Vehicle("ABC-123", "Ford Transit", new BigDecimal("1200.50"), null);
+        vehicle.setStatus(VehicleStatus.BROKEN_DOWN);
+        when(vehicles.findById(id)).thenReturn(Optional.of(vehicle));
+
+        assertThatThrownBy(() -> service.changeStatus(id, VehicleStatus.AVAILABLE))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("resolve");
+    }
+
+    @Test
     void deleteOnRouteVehicleThrowsConflict() {
         UUID id = UUID.randomUUID();
         Vehicle vehicle = new Vehicle("ABC-123", "Ford Transit", new BigDecimal("1200.50"), null);

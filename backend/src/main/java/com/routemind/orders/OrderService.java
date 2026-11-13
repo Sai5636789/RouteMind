@@ -121,6 +121,8 @@ public class OrderService {
         vehicles.save(vehicle);
         order.setAssignedVehicleId(vehicleId);
         order.setAssignedDriverId(driverId);
+        // A flagged order assigned by hand is no longer waiting.
+        order.setNeedsReassignment(false);
         transition(order, OrderStatus.ASSIGNED);
         return orders.save(order);
     }
@@ -144,6 +146,8 @@ public class OrderService {
     public Order cancel(UUID id) {
         Order order = get(id);
         transition(order, OrderStatus.CANCELLED);
+        // A cancelled order is no longer waiting for a vehicle.
+        order.setNeedsReassignment(false);
         releaseVehicle(order);
         return orders.save(order);
     }

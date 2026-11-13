@@ -1,0 +1,21 @@
+<h2 mat-dialog-title>Report breakdown — {{ data.vehicle.plateNumber }}</h2>
+<mat-dialog-content>
+  <p>
+    This takes {{ data.vehicle.plateNumber }} out of service immediately. Its
+    active orders go back to unassigned and are flagged for reassignment, and
+    live tracking stops for the vehicle.
+  </p>
+  <form class="form" [formGroup]="form">
+    <mat-form-field appearance="outline">
+      <mat-label>What happened? (optional)</mat-label>
+      <textarea matInput formControlName="reason" rows="3" maxlength="500"></textarea>
+      @if (form.controls.reason.hasError('maxlength')) {
+        <mat-error>Keep it under 500 characters.</mat-error>
+      }
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()">Cancel</button>
+  <button mat-raised-button color="warn" (click)="confirm()">Report breakdown</button>
+</mat-dialog-actions>

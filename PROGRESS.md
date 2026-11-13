@@ -551,9 +551,136 @@ Not verified in this VM:
 
 Save assignments, dispatcher approval, driver view, delivery status updates.
 
-## Incidents and integration testing
+## Incidents and integration testing — completed Nov 13, 2026
 
-Vehicle breakdown simulation, basic rerouting, integration tests, bug fixes.
+Vehicle breakdown simulation, basic rerouting after a breakdown, and
+integration tests for the main flows.
+
+Backend (`backend/src/main/java/com/routemind/incidents/`,
+migration `V3__incidents_and_broken_down.sql`):
+
+- `POST /api/v1/incidents` reports a breakdown: the vehicle becomes
+  `BROKEN_DOWN` (new status, added to the vehicles check constraint),
+  its active orders (`ASSIGNED`/`IN_TRANSIT`) are unassigned, returned
+  to `CREATED`, and flagged (`orders.needs_reassignment`), and an
+  incident row plus one `incident_orders` row per affected order (with
+  the status the order had) records it. Delivered/cancelled orders
+  are never touched; a parked vehicle with no active orders still gets
+  an incident, with no affected orders. A second breakdown of an
+  already broken-down vehicle is a 409.
+- Tracking stops honestly: the simulator only moves `ON_ROUTE`
+  vehicles, so the broken-down vehicle stops moving on its own, and
+  reporting also removes its stored last-known position from Redis
+  (`VehiclePositionStore.remove`) and drops its in-progress simulated
+  route (`GpsSimulator.clearRoute`).
+- `POST /api/v1/incidents/{id}/reroute` re-runs the real OR-Tools
+  optimizer over only the incident's still-flagged orders and only
+  the `AVAILABLE` vehicles, then applies the plan: placed orders are
+  assigned to their new vehicle and an active driver (round-robin
+  across the rerouted vehicles) and set to `ASSIGNED`, the new
+  vehicles go `ON_ROUTE`, and the incident records which vehicle each
+  order was rerouted to. Orders the optimizer could not place stay
+  `CREATED` and flagged, and are returned as still waiting. No
+  available vehicle, no active driver, or no orders still waiting is
+  a 409; a resolved incident cannot be rerouted.
+- `POST /api/v1/incidents/{id}/resolve` returns the vehicle to
+  `AVAILABLE` and marks the incident `RESOLVED`. Orders still waiting
+  stay flagged. `GET /api/v1/incidents` (optional `?status=`) and
+  `GET /api/v1/incidents/{id}` list and read incidents with their
+  affected orders.
+- Guards: the generic status endpoint (`PATCH /vehicles/{id}/status`)
+  and the vehicle edit endpoint (`PUT /vehicles/{id}`) both refuse
+  `BROKEN_DOWN`, and refuse any change to a broken-down vehicle — the
+  incident flow is the only way in and out. A manual assignment or a
+  cancel clears `needsReassignment` on the order.
+- One rule this surfaced, kept as is: manual assignment
+  (`POST /orders/{id}/assign`) still takes the vehicle `ON_ROUTE` on
+  the first order, so a second manual assignment to the same vehicle
+  is refused — the reroute is the path that puts several orders on one
+  vehicle.
+
+Frontend: the Vehicles page has an open-breakdowns card (vehicle,
+reason, reported time, affected orders with the status each had,
+**Reroute orders** and **Resolve**), a car-crash **Report breakdown**
+button on available/on-route vehicles (dialog with an optional reason),
+and a reroute summary after a run (assignments, totals, matrix source,
+and any orders still waiting). The Orders page shows a **Needs
+reassignment** badge on flagged orders. The fleet map lists a
+broken-down vehicle in the side panel instead of parking it at the
+depot, and a flagged stop's popup says it needs reassignment after a
+breakdown. The vehicle edit form no longer offers `BROKEN_DOWN`
+(`EDITABLE_VEHICLE_STATUSES`).
+
+Tests (`mvn test`, frontend `npx ng test --watch=false`):
+
+- New backend tests, 26: `IncidentServiceTest` 12 (breakdown flags
+  orders and stops tracking, parked breakdown, reroute applies the
+  plan, unplaced orders stay flagged, no-vehicle / no-waiting /
+  resolved 409s, resolve returns the vehicle), `IncidentControllerTest`
+  8 (201/404/409/400, reroute and resolve shapes, list), plus
+  `IncidentFlowTest` 1 — the full flow at the service layer with the
+  real `OrderService`, `IncidentService` and GPS simulator sharing
+  in-memory repositories: assign, start transit, breakdown, reroute
+  (asserting the optimizer was asked for exactly the flagged order
+  and the available vehicle), resolve. The optimizer itself stays
+  mocked there with a plan built from the input it was given; the
+  real solver is covered by `OptimizationServiceTest`. `VehicleServiceTest`
+  +3 and `OrderServiceTest` +2 cover the new guards and the flag
+  clearing on assign/cancel.
+- New frontend tests, 14: `IncidentService` 5, breakdown dialog 4,
+  vehicle list incidents 3, order-list badge 1, fleet-map broken-down
+  placement 1.
+
+Verification in this session: backend 131/131 pass excluding
+`RouteMindApplicationTests` (needs live Postgres + Redis) and
+`OsrmClientTest` (9 tests, 4 fail — the same pre-existing localhost
+stub-server failures as the optimization milestone: the sandbox blocks
+the JVM's TCP connections, an environment limit, not a code failure).
+Full suite is 143 tests: 136 pass, 4 known `OsrmClientTest` failures,
+3 `RouteMindApplicationTests` not run.
+Frontend production build passes (unchanged, pre-existing 500 kB
+budget warning); frontend tests 59/59 pass (45 before + 14 new).
+Maven note for this VM: the shell runs as root, so Maven's local
+repository is `/root/.m2`, while the populated repo is
+`/home/hatch/.m2` — run with
+`mvn -o -s /home/hatch/.m2/settings.xml -Dmaven.repo.local=/home/hatch/.m2/repository test`.
+One Surefire dependency (`plexus-utils:1.1`) was missing from the
+local repo and was fetched with curl into it; the repo also gained
+`_remote.repositories` markers so offline mode accepts the
+curl-fetched artifacts. Karma needs the Playwright Chromium:
+`CHROME_BIN=/home/hatch/.cache/ms-playwright/chromium-1254/chrome-linux64/chrome`
+(the Meta Chrome at `/opt/meta-chromium/chrome` refuses to start
+without a domain policy).
+
+Screenshots (real frontend, `ng serve` + a throwaway stub API on
+`:8080` serving fixed fake data, because the backend cannot start in
+this VM — the data is labelled stub data here, not a backend
+verification):
+
+- `work/screenshots/incidents-vehicles.png` — Vehicles page with the
+  open-breakdowns card (VAN-002, Engine failure, Ana was IN_TRANSIT),
+  the `BROKEN_DOWN` pill, and the breakdown button on the in-service
+  vehicles.
+- `work/screenshots/incidents-breakdown-dialog.png` — the report
+  dialog for VAN-001 with the optional reason field.
+- `work/screenshots/incidents-reroute-result.png` — the reroute
+  summary: "Rerouted 1 order(s): Ana → VAN-001, 4.2 km · 6 min ·
+  straight-line distances — treat the times as estimates."
+
+Not verified in this VM:
+
+- The breakdown/reroute flow against the real backend on Postgres +
+  Redis (Flyway migration V3, the incident endpoints, and the map
+  rendering of a real reroute): covered at the service, controller,
+  and component-test levels here, but no live run exists yet. On a
+  normal machine: `docker compose up --build`, sign in, create a
+  depot, vehicles and orders, assign and start transit, report a
+  breakdown from the Vehicles page, reroute, and check the map shows
+  the new routes and the broken-down vehicle listed in the side panel.
+- A real OSRM matrix through the reroute (same open item as the
+  optimization milestone): the reroute ran on the straight-line matrix
+  in the flow test; with OSRM reachable the same code path takes the
+  `OSRM` matrix instead.
 
 ## Polish and documentation
 

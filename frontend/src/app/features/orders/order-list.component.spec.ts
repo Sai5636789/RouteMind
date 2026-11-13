@@ -23,6 +23,7 @@ const baseOrder = {
   weightKg: 12,
   assignedVehicleId: null,
   assignedDriverId: null,
+  needsReassignment: false,
   createdAt: '2026-11-12T00:00:00Z',
   updatedAt: '2026-11-12T00:00:00Z',
 };
@@ -30,16 +31,9 @@ const baseOrder = {
 describe('OrderListComponent', () => {
   let fixture: ComponentFixture<OrderListComponent>;
 
-  beforeEach(async () => {
+  async function setup(rows: Order[]): Promise<void> {
     const orders = jasmine.createSpyObj<OrderService>('OrderService', ['list']);
-    orders.list.and.returnValue(
-      of(
-        pageOf([
-          { ...baseOrder, id: '1', customerName: 'Ana', status: 'CREATED' },
-          { ...baseOrder, id: '2', customerName: 'Ben', status: 'IN_TRANSIT' },
-        ]),
-      ),
-    );
+    orders.list.and.returnValue(of(pageOf(rows)));
     const dialog = jasmine.createSpyObj<MatDialog>('MatDialog', ['open']);
 
     await TestBed.configureTestingModule({
@@ -54,9 +48,14 @@ describe('OrderListComponent', () => {
 
     fixture = TestBed.createComponent(OrderListComponent);
     fixture.detectChanges();
-  });
+  }
 
-  it('shows only the lifecycle actions each status allows', () => {
+  it('shows only the lifecycle actions each status allows', async () => {
+    await setup([
+      { ...baseOrder, id: '1', customerName: 'Ana', status: 'CREATED' },
+      { ...baseOrder, id: '2', customerName: 'Ben', status: 'IN_TRANSIT' },
+    ]);
+
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Ana');
     expect(text).toContain('Ben');
@@ -74,5 +73,18 @@ describe('OrderListComponent', () => {
     expect(buttons.filter((label) => label === 'Assign').length).toBe(1);
     expect(buttons.filter((label) => label === 'Deliver').length).toBe(1);
     expect(buttons).not.toContain('Start transit');
+  });
+
+  it('flags an order waiting for reassignment after a breakdown', async () => {
+    await setup([
+      { ...baseOrder, id: '1', customerName: 'Ana', status: 'CREATED', needsReassignment: true },
+      { ...baseOrder, id: '2', customerName: 'Ben', status: 'IN_TRANSIT' },
+    ]);
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Ana');
+    expect(text).toContain('Needs reassignment');
+    // Exactly one badge: only the flagged order gets one.
+    expect(text.match(/Needs reassignment/g)?.length).toBe(1);
   });
 });
