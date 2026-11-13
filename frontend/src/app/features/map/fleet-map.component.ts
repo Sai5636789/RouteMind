@@ -5,14 +5,16 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import * as L from 'leaflet';
-import { forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { Subscription, forkJoin, of } from 'rxjs';
+import { catchError, finalize } from 'rxjs/operators';
 import { apiErrorMessage } from '../../core/models/api-error';
 import { Depot } from '../../core/models/depot';
 import { Order } from '../../core/models/order';
 import { Vehicle } from '../../core/models/vehicle';
+import { VehiclePosition } from '../../core/models/vehicle-position';
 import { DepotService } from '../../core/services/depot.service';
 import { OrderService } from '../../core/services/order.service';
+import { TrackingConnection, TrackingService } from '../../core/services/tracking.service';
 import { VehicleService } from '../../core/services/vehicle.service';
 import {
   FleetMapView,
@@ -49,26 +51,31 @@ export class FleetMapComponent implements OnInit, OnDestroy {
   private readonly depots = inject(DepotService);
   private readonly vehicles = inject(VehicleService);
   private readonly orders = inject(OrderService);
+  private readonly tracking = inject(TrackingService);
 
   protected readonly state = signal<LoadState>('loading');
   protected readonly error = signal<string | null>(null);
   protected readonly activeOnly = signal(true);
+  protected readonly connection = signal<TrackingConnection>('offline');
 
   private readonly depotList = signal<Depot[]>([]);
   private readonly vehicleList = signal<Vehicle[]>([]);
   private readonly orderList = signal<Order[]>([]);
+  private readonly livePositions = signal<Map<string, VehiclePosition>>(new Map());
 
   protected readonly shownOrders = computed(() =>
     this.activeOnly() ? this.orderList().filter((o) => !isTerminalOrder(o)) : this.orderList(),
   );
   protected readonly view = computed<FleetMapView>(() =>
-    buildFleetMapView(this.depotList(), this.vehicleList(), this.shownOrders()),
+    buildFleetMapView(this.depotList(), this.vehicleList(), this.shownOrders(), this.livePositions()),
   );
 
   private readonly mapElement = viewChild<ElementRef<HTMLDivElement>>('map');
   private map: L.Map | null = null;
   private layers: L.LayerGroup | null = null;
   private readonly markers = new Map<string, L.Marker>();
+  private lastStructureKey: string | null = null;
+  private readonly subscriptions = new Subscription();
 
   constructor() {
     effect(() => {
@@ -81,10 +88,18 @@ export class FleetMapComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.subscriptions.add(
+      this.tracking.positions$.subscribe((positions) => this.livePositions.set(positions)),
+    );
+    this.subscriptions.add(
+      this.tracking.connection$.subscribe((connection) => this.connection.set(connection)),
+    );
     this.load();
   }
 
   ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+    this.tracking.disconnect();
     this.map?.remove();
     this.map = null;
   }
@@ -110,6 +125,15 @@ export class FleetMapComponent implements OnInit, OnDestroy {
       this.vehicleList.set(vehicles.content);
       this.orderList.set(orders.content);
       this.state.set('ready');
+      // Seed the map with the latest stored positions, then subscribe
+      // to live broadcasts. Seeding first means markers never jump
+      // from a fallback spot to a live one on the first broadcast.
+      // finalize() runs whether the snapshot succeeds or fails, so a
+      // failed snapshot never blocks live updates.
+      this.tracking
+        .latest()
+        .pipe(finalize(() => this.tracking.connect()))
+        .subscribe((positions) => this.tracking.seed(positions));
     });
   }
 
@@ -134,12 +158,22 @@ export class FleetMapComponent implements OnInit, OnDestroy {
   }
 
   protected vehiclePlacementNote(marker: MapVehicleMarker): string {
+    if (marker.placement === 'live' && marker.live) {
+      const updated = new Date(marker.live.updatedAt).toLocaleTimeString();
+      return `Live · ${marker.live.speedKmh} km/h · updated ${updated}`;
+    }
     if (marker.placement === 'at-stop' && marker.order) {
       return `On the way to ${marker.order.customerName} — live position is not tracked yet.`;
     }
-    return 'Parked at the depot — live positions arrive with real-time tracking.';
+    return 'Parked at the depot — live position is not tracked yet.';
   }
 
+  /**
+   * Renders the map. The depot, stops and routes only change when the
+   * underlying data changes, so they are rebuilt only then; live
+   * positions arrive every few seconds and only move the vehicle
+   * markers in place, so popups stay open and the map never flickers.
+   */
   private renderMap(element: HTMLDivElement, view: FleetMapView): void {
     if (!this.map) {
       this.map = L.map(element).setView(view.center!, 13);
@@ -153,6 +187,21 @@ export class FleetMapComponent implements OnInit, OnDestroy {
       // ask Leaflet to re-measure once it has been laid out.
       setTimeout(() => this.map?.invalidateSize(), 0);
     }
+
+    const structureKey = JSON.stringify({
+      depot: view.depot?.id ?? null,
+      stops: view.stops.map((stop) => stop.order.id),
+      routes: view.routes.map((route) => route.points),
+      vehicles: view.vehicles.map((marker) => marker.vehicle.id),
+    });
+    if (structureKey !== this.lastStructureKey) {
+      this.lastStructureKey = structureKey;
+      this.renderStructure(view);
+    }
+    this.syncVehicleMarkers(view);
+  }
+
+  private renderStructure(view: FleetMapView): void {
     this.layers?.clearLayers();
     this.markers.clear();
 
@@ -190,7 +239,22 @@ export class FleetMapComponent implements OnInit, OnDestroy {
       this.markers.set(`stop:${stop.order.id}`, marker);
     }
 
+    for (const route of view.routes) {
+      L.polyline(route.points, { color: route.color, weight: 3, dashArray: '8 6' })
+        .bindTooltip(`${escapeHtml(route.plateNumber)} — stops in creation order`, { sticky: true })
+        .addTo(this.layers!);
+    }
+  }
+
+  private syncVehicleMarkers(view: FleetMapView): void {
     for (const marker of view.vehicles) {
+      const key = `vehicle:${marker.vehicle.id}`;
+      const existing = this.markers.get(key);
+      if (existing) {
+        existing.setLatLng(marker.position);
+        existing.setPopupContent(this.vehiclePopup(marker));
+        continue;
+      }
       const leafletMarker = L.marker(marker.position, {
         icon: L.divIcon({
           className: '',
@@ -198,20 +262,18 @@ export class FleetMapComponent implements OnInit, OnDestroy {
           iconSize: [36, 36],
           iconAnchor: [18, 18],
         }),
-      }).bindPopup(
-        `<strong>${escapeHtml(marker.vehicle.plateNumber)}</strong> · ${escapeHtml(marker.vehicle.model)}<br>` +
-          `Status: ${escapeHtml(marker.vehicle.status)}<br>` +
-          escapeHtml(this.vehiclePlacementNote(marker)),
-      );
+      }).bindPopup(this.vehiclePopup(marker));
       leafletMarker.addTo(this.layers!);
-      this.markers.set(`vehicle:${marker.vehicle.id}`, leafletMarker);
+      this.markers.set(key, leafletMarker);
     }
+  }
 
-    for (const route of view.routes) {
-      L.polyline(route.points, { color: route.color, weight: 3, dashArray: '8 6' })
-        .bindTooltip(`${escapeHtml(route.plateNumber)} — stops in creation order`, { sticky: true })
-        .addTo(this.layers!);
-    }
+  private vehiclePopup(marker: MapVehicleMarker): string {
+    return (
+      `<strong>${escapeHtml(marker.vehicle.plateNumber)}</strong> · ${escapeHtml(marker.vehicle.model)}<br>` +
+      `Status: ${escapeHtml(marker.vehicle.status)}<br>` +
+      escapeHtml(this.vehiclePlacementNote(marker))
+    );
   }
 
   private plateFor(vehicleId: string): string {

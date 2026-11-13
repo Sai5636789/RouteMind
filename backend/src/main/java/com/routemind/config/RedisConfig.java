@@ -9,8 +9,8 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /**
  * Redis wiring. The connection itself is configured in application.yml
- * (spring.data.redis.*). Real-time tracking uses this template's
- * geo operations; nothing reads or writes Redis yet.
+ * (spring.data.redis.*). Real-time tracking uses this template's geo
+ * and hash operations through VehiclePositionStore.
  */
 @Configuration
 public class RedisConfig {

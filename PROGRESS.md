@@ -211,9 +211,77 @@ Remaining issues:
 - The fleet map shows real data only once the backend runs; until
   then it shows the honest "Backend unreachable" state.
 
-## Real-time tracking
+## Real-time tracking — completed Nov 13, 2026
 
 GPS simulator, Redis GEO, latest vehicle state, WebSockets, live markers.
+All in the working tree, not committed — commits are on hold until Sai
+says to commit/push.
+
+What was built:
+
+- Backend `com.routemind.tracking`: `GeoMath` (haversine, bearing,
+  destination point), `RouteProgress` (depot → stops in creation order,
+  advances by metres, stops at the last stop), `VehiclePositionStore`
+  (Redis GEO `tracking:vehicles:geo`, per-vehicle hash, id set; malformed
+  entries skipped, never served), `GpsSimulator` (5-second tick, only
+  `ON_ROUTE` vehicles with active assigned orders move; route resets when
+  waypoints change; finished vehicles stop broadcasting after the final
+  position; Redis/DB failures logged and the tick skipped, never faked),
+  `TrackingController` (`GET /api/v1/tracking/vehicles`,
+  `GET /api/v1/tracking/vehicles/{id}`,
+  `GET /api/v1/tracking/vehicles/nearby`), and broadcast of every new
+  position on STOMP `/topic/vehicles` via the existing `/ws` endpoint.
+  Simulator settings: `TRACKING_ENABLED` / `TRACKING_TICK_MILLIS` /
+  `TRACKING_SPEED_KMH` (defaults true / 5000 ms / 40 km/h).
+- Frontend `TrackingService`: STOMP client over `/ws`, `positions$`
+  stream, snapshot seed from `GET /api/v1/tracking/vehicles`, and a
+  10-second snapshot poll fallback when the socket is down. The fleet
+  map seeds from the snapshot, subscribes, and moves vehicle markers in
+  place (`setLatLng`) — the depot, stops and routes are only re-rendered
+  when the underlying data changes, so popups stay open. A status chip
+  shows Live tracking / Snapshot / Tracking offline. Live positions
+  override the depot/stop fallback; vehicles without one keep the old
+  placement rules and are never invented.
+- `frontend/nginx.conf` now proxies `/ws` to the backend with the
+  WebSocket upgrade headers, so live tracking works in Docker too.
+- Development now runs behind the `ng serve` proxy (`proxy.conf.json`,
+  wired into `npm start`) with relative API/WS URLs. The backend sends
+  no CORS headers, so the previous absolute `localhost:8080` dev URLs
+  were blocked by the browser and the map showed "API is not answering".
+
+Verified end to end on Nov 13, 2026 (local Postgres 16 + PostGIS and
+Redis 7 started in this VM; backend jar run directly, Docker compose
+was not used): seeded one `ON_ROUTE` vehicle with one assigned order,
+watched it move ~55 m per 5-second tick at 40 km/h toward its stop
+across two `GET /api/v1/tracking/vehicles` polls, confirmed the Redis
+GEO/hash/id-set keys and the `nearby` endpoint, and received a live
+position on `/topic/vehicles` with a STOMP client. Screenshots:
+`work/screenshots/live-tracking-map-1.png` and `live-tracking-map-2.png`
+— the truck marker visibly moves along the route between them, and the
+side panel shows "Live · 40 km/h · updated …". OpenStreetMap tiles did
+not load in this VM's headless Chrome, so the map background is grey in
+the screenshots; markers, routes and panels are real.
+
+Tests: backend tracking suite 23/23 pass (`GeoMathTest`,
+`RouteProgressTest`, `VehiclePositionStoreTest`, `GpsSimulatorTest`,
+`TrackingControllerTest`); full backend suite 65/68 — the 3 errors are
+the pre-existing `RouteMindApplicationTests` context-load failure (the
+integration tests cannot reach local Postgres from the test JVM; the
+same app runs fine as a jar). Frontend: 16/16 tests pass, production
+build passes (pre-existing 500 kB bundle-budget warning unchanged).
+
+Remaining issues:
+
+- The live demo data used for verification (vehicle `LIVE-001`, one
+  assigned order, one driver) lives only in this VM's local Postgres;
+  it is not in the repo and will not be in a fresh Docker setup. A
+  sample dataset is planned with the polish work.
+- Writes still answer 401 until JWT login lands (HTTP Basic is
+  disabled by design); test data can only be seeded directly in the
+  database for now.
+- `RouteMindApplicationTests` still fails in this VM for the
+  pre-existing Java/Postgres socket reason; it needs a real database
+  (Docker or CI) to pass.
 
 ## Road routing
 

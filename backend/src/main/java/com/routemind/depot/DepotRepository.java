@@ -39,11 +39,11 @@ public class DepotRepository {
         this.jdbc = jdbc;
     }
 
-    List<Depot> findAll() {
+    public List<Depot> findAll() {
         return jdbc.query(SELECT + " ORDER BY created_at", ROW);
     }
 
-    Optional<Depot> findById(UUID id) {
+    public Optional<Depot> findById(UUID id) {
         return jdbc.query(SELECT + " WHERE id = ?", ROW, id).stream().findFirst();
     }
 }

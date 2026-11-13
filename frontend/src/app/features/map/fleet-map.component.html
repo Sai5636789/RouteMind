@@ -33,9 +33,24 @@
   <mat-card class="note-card">
     <mat-card-content>
       <p>
-        Vehicle positions are not tracked live yet — available vehicles are
-        shown at their depot, and on-route vehicles at their next stop.
-        Live positions arrive with real-time tracking.
+        @switch (connection()) {
+          @case ('live') {
+            Vehicle markers move live as new positions arrive. A vehicle
+            with no tracked position yet is shown at its next assigned stop
+            while on route, or at the depot while parked.
+          }
+          @case ('polling') {
+            Live updates are unavailable right now, so the map shows the
+            latest snapshot and refreshes it every 10 seconds. A vehicle
+            with no tracked position yet is shown at its next assigned stop
+            while on route, or at the depot while parked.
+          }
+          @default {
+            Live tracking is not connected. Vehicle markers show the latest
+            known placement: an on-route vehicle at its next assigned stop,
+            a parked vehicle at the depot.
+          }
+        }
       </p>
       <p>
         Routes are drawn in creation order. Optimized routing arrives with
@@ -48,6 +63,30 @@
     <mat-checkbox [checked]="activeOnly()" (change)="onActiveOnlyChange($event.checked)">
       Active orders only
     </mat-checkbox>
+    <span
+      class="tracking-status"
+      [class.live]="connection() === 'live'"
+      [class.polling]="connection() === 'polling'"
+    >
+      <mat-icon>{{
+        connection() === 'live'
+          ? 'gps_fixed'
+          : connection() === 'polling'
+            ? 'gps_not_fixed'
+            : 'gps_off'
+      }}</mat-icon>
+      @switch (connection()) {
+        @case ('live') {
+          Live tracking
+        }
+        @case ('polling') {
+          Snapshot, refreshing every 10s
+        }
+        @default {
+          Tracking offline
+        }
+      }
+    </span>
   </div>
 
   <div class="map-layout">

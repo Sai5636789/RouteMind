@@ -1,6 +1,7 @@
 import { Depot } from '../../core/models/depot';
 import { Order, OrderStatus } from '../../core/models/order';
 import { Vehicle } from '../../core/models/vehicle';
+import { VehiclePosition } from '../../core/models/vehicle-position';
 
 /**
  * The fleet map's view model, built from the real APIs with pure
@@ -10,12 +11,13 @@ import { Vehicle } from '../../core/models/vehicle';
  * Where each marker goes, and why:
  * - The depot marker is the depot's real location from the API.
  * - Every order is a stop marker at its real delivery coordinates.
- * - A vehicle has no tracked position yet (live positions arrive with
- *   real-time tracking), so it is never placed at an invented point:
- *   an available, maintenance or out-of-service vehicle is shown at its
- *   depot — where a parked vehicle is — and an on-route vehicle is shown
- *   at its next assigned stop, labelled as heading there. A vehicle
- *   that cannot be placed at all is listed separately, never guessed.
+ * - A vehicle with a live tracked position is shown at that position.
+ * - A vehicle with no tracked position is never placed at an invented
+ *   point: an available, maintenance or out-of-service vehicle is shown
+ *   at its depot — where a parked vehicle is — and an on-route vehicle
+ *   is shown at its next assigned stop, labelled as heading there. A
+ *   vehicle that cannot be placed at all is listed separately, never
+ *   guessed.
  * - A route polyline joins the depot to a vehicle's active assigned
  *   stops in creation order. It is a sequence, not an optimized route:
  *   optimized routing arrives with route optimization.
@@ -48,9 +50,11 @@ export interface MapStop {
 export interface MapVehicleMarker {
   vehicle: Vehicle;
   position: LatLng;
-  placement: 'at-depot' | 'at-stop';
+  placement: 'at-depot' | 'at-stop' | 'live';
   /** The stop an on-route vehicle is heading to, if any. */
   order?: Order;
+  /** The live position, present only when placement is 'live'. */
+  live?: VehiclePosition;
 }
 
 export interface MapRoute {
@@ -90,6 +94,7 @@ export function buildFleetMapView(
   depots: Depot[],
   vehicles: Vehicle[],
   orders: Order[],
+  positions: ReadonlyMap<string, VehiclePosition> = new Map(),
 ): FleetMapView {
   const depot = [...depots].sort(byCreatedAt)[0] ?? null;
   const depotPosition: LatLng | null = depot ? [depot.latitude, depot.longitude] : null;
@@ -120,6 +125,32 @@ export function buildFleetMapView(
   const orderedVehicles = [...vehicles].sort(byCreatedAt);
   orderedVehicles.forEach((vehicle, vehicleIndex) => {
     const active = activeOrdersByVehicle.get(vehicle.id) ?? [];
+    // A live tracked position wins over every fallback: it is the
+    // vehicle's real location, not a depot or a stop it is heading to.
+    const live = positions.get(vehicle.id);
+    if (live) {
+      const target = live.orderId ? stopByOrderId.get(live.orderId)?.order : undefined;
+      markers.push({
+        vehicle,
+        position: [live.latitude, live.longitude],
+        placement: 'live',
+        order: target,
+        live,
+      });
+      const points: LatLng[] = [
+        ...(depotPosition ? [depotPosition] : []),
+        ...active.map((order) => stopByOrderId.get(order.id)!.position),
+      ];
+      if (points.length >= 2) {
+        routes.push({
+          vehicleId: vehicle.id,
+          plateNumber: vehicle.plateNumber,
+          points,
+          color: ROUTE_COLORS[vehicleIndex % ROUTE_COLORS.length],
+        });
+      }
+      return;
+    }
     if (active.length > 0) {
       const firstStop = stopByOrderId.get(active[0].id);
       if (firstStop) {

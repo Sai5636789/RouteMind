@@ -106,4 +106,59 @@ describe('buildFleetMapView', () => {
     expect(view.vehicles).toEqual([]);
     expect(view.vehiclesWithoutPosition.map((v) => v.id)).toEqual(['v1']);
   });
+
+  it('places a vehicle with a live position at that position, not at its stop', () => {
+    const onRoute = vehicle('v1', 'ABC-123', 'ON_ROUTE');
+    const stop = order('o1', 'Ana', 'ASSIGNED', 29.7, -82.3, 'v1');
+    const positions = new Map([
+      [
+        'v1',
+        {
+          vehicleId: 'v1',
+          latitude: 29.68,
+          longitude: -82.31,
+          speedKmh: 40,
+          headingDegrees: 45,
+          orderId: 'o1',
+          updatedAt: '2026-11-13T04:00:00Z',
+        },
+      ],
+    ]);
+
+    const view = buildFleetMapView([depot], [onRoute], [stop], positions);
+
+    const driving = view.vehicles.find((marker) => marker.vehicle.id === 'v1');
+    expect(driving?.placement).toBe('live');
+    expect(driving?.position).toEqual([29.68, -82.31]);
+    expect(driving?.order?.id).toBe('o1');
+    expect(driving?.live?.speedKmh).toBe(40);
+    // The route still joins the depot to the stop in creation order.
+    expect(view.routes[0].points).toEqual([
+      [29.6516, -82.3248],
+      [29.7, -82.3],
+    ]);
+  });
+
+  it('ignores live positions for vehicles that are not on the map', () => {
+    const available = vehicle('v2', 'DEF-456', 'AVAILABLE');
+    const positions = new Map([
+      [
+        'unknown-vehicle',
+        {
+          vehicleId: 'unknown-vehicle',
+          latitude: 29.68,
+          longitude: -82.31,
+          speedKmh: 40,
+          headingDegrees: null,
+          orderId: null,
+          updatedAt: '2026-11-13T04:00:00Z',
+        },
+      ],
+    ]);
+
+    const view = buildFleetMapView([depot], [available], [], positions);
+
+    expect(view.vehicles.map((marker) => marker.vehicle.id)).toEqual(['v2']);
+    expect(view.vehicles[0].placement).toBe('at-depot');
+  });
 });

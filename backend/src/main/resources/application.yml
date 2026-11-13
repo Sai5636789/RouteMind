@@ -35,6 +35,15 @@ spring:
       port: ${REDIS_PORT:6379}
       timeout: 2s
 
+routemind:
+  tracking:
+    # Simulated GPS: moves ON_ROUTE vehicles along their assigned stops.
+    # Switch off when real GPS feeds arrive; the map then shows only
+    # vehicles with a stored position.
+    enabled: ${TRACKING_ENABLED:true}
+    tick-millis: ${TRACKING_TICK_MILLIS:5000}
+    default-speed-kmh: ${TRACKING_SPEED_KMH:40}
+
 management:
   endpoints:
     web:

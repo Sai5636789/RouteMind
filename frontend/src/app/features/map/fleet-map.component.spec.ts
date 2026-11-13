@@ -6,8 +6,10 @@ import { of, throwError } from 'rxjs';
 import { Order } from '../../core/models/order';
 import { Paged } from '../../core/models/paged';
 import { Vehicle } from '../../core/models/vehicle';
+import { VehiclePosition } from '../../core/models/vehicle-position';
 import { DepotService } from '../../core/services/depot.service';
 import { OrderService } from '../../core/services/order.service';
+import { TrackingService } from '../../core/services/tracking.service';
 import { VehicleService } from '../../core/services/vehicle.service';
 import { FleetMapComponent } from './fleet-map.component';
 
@@ -62,6 +64,20 @@ describe('FleetMapComponent', () => {
       updatedAt: '2026-11-12T00:00:00Z',
     };
     orders.list.and.returnValue(of(pageOf([order])));
+    const tracking = jasmine.createSpyObj<TrackingService>('TrackingService', [
+      'latest',
+      'connect',
+      'disconnect',
+      'ingest',
+      'seed',
+    ]);
+    // positions$ and connection$ are read-only on the real service, so
+    // they are attached with Object.assign rather than assignment.
+    Object.assign(tracking, {
+      positions$: of(new Map<string, VehiclePosition>()),
+      connection$: of('offline'),
+    });
+    tracking.latest.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
       imports: [FleetMapComponent],
@@ -72,11 +88,12 @@ describe('FleetMapComponent', () => {
         { provide: DepotService, useValue: depots },
         { provide: VehicleService, useValue: vehicles },
         { provide: OrderService, useValue: orders },
+        { provide: TrackingService, useValue: tracking },
       ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(FleetMapComponent);
-    return { depots, vehicles, orders };
+    return { depots, vehicles, orders, tracking };
   }
 
   it('renders the map, depot, vehicle and stop from the real APIs', fakeAsync(async () => {
@@ -90,8 +107,19 @@ describe('FleetMapComponent', () => {
     expect(text).toContain('Ana');
     // The map container itself is rendered once data is ready.
     expect(fixture.nativeElement.querySelector('.map')).not.toBeNull();
-    // The honest note about positions not being live-tracked yet.
-    expect(text).toContain('not tracked live yet');
+    // With no live connection the note says tracking is not connected,
+    // and the parked vehicle is shown at the depot.
+    expect(text).toContain('Live tracking is not connected');
+    expect(text).toContain('Parked at the depot');
+  }));
+
+  it('seeds the map from the latest snapshot and subscribes to live tracking', fakeAsync(async () => {
+    const { tracking } = await setup();
+    fixture.detectChanges();
+    tick();
+
+    expect(tracking.latest).toHaveBeenCalled();
+    expect(tracking.connect).toHaveBeenCalled();
   }));
 
   it('shows the error state when the APIs do not answer', fakeAsync(async () => {

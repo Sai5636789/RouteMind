@@ -15,10 +15,12 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
  * Docker healthchecks and the dashboard can probe the service.
  *
  * TEMPORARY, local-demo only: read (GET) endpoints for vehicles, drivers,
- * orders and depots are public so the dispatcher dashboard and the fleet
- * map can load data before authentication lands. Every write and every
- * lifecycle action (POST, PUT, PATCH, DELETE) still requires
+ * orders, depots and tracking are public so the dispatcher dashboard and
+ * the fleet map can load data before authentication lands. Every write
+ * and every lifecycle action (POST, PUT, PATCH, DELETE) still requires
  * authentication and answers 401 until the token mechanism lands.
+ * The /ws endpoint is public for the same reason: it only broadcasts
+ * live vehicle positions, and the dashboard cannot subscribe otherwise.
  * This exception must be removed when JWT login is added — see the
  * authentication feature. Do not extend it to writes or to new resources
  * without a deliberate decision.
@@ -31,6 +33,7 @@ public class SecurityConfig {
         "/api/v1/drivers/**",
         "/api/v1/orders/**",
         "/api/v1/depots/**",
+        "/api/v1/tracking/**",
     };
 
     @Bean
@@ -44,6 +47,7 @@ public class SecurityConfig {
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/health", "/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, TEMPORARY_PUBLIC_READS).permitAll()
                         .anyRequest().authenticated())
                 .build();

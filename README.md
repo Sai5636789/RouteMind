@@ -139,17 +139,49 @@ fleet on OpenStreetMap tiles:
 - **Depot** — the seeded depot's real location from the depot API.
 - **Delivery stops** — one numbered marker per order, coloured by
   status; click for customer, address, status and assigned vehicle.
-- **Vehicles** — available vehicles are shown at their depot and
-  on-route vehicles at their next assigned stop. Vehicle positions are
-  not tracked live yet (that arrives with real-time tracking), so no
-  position is ever invented; a vehicle that cannot be placed is listed
-  in the side panel instead of on the map.
+- **Vehicles** — a vehicle with a live tracked position is shown at
+  that position and moves as new positions arrive (see Real-time
+  tracking below). A vehicle with no tracked position yet is shown at
+  its depot while parked, or at its next assigned stop while on route,
+  so no position is ever invented; a vehicle that cannot be placed is
+  listed in the side panel instead of on the map.
 - **Routes** — a dashed polyline per vehicle, depot to its active
   assigned stops in creation order. Optimized routing arrives with
   route optimization.
 - **Side panel** — depot, vehicles and stops; clicking one flies the
   map to it. An "Active orders only" filter hides delivered and
   cancelled stops.
+
+## Real-time tracking
+
+A GPS simulator moves every on-route vehicle along its assigned stops
+(depot → stops in creation order) at a configurable speed, and stores
+each position in Redis GEO (`tracking:vehicles:geo`, plus a per-vehicle
+hash and an id set). The map subscribes to the STOMP topic
+`/topic/vehicles` on `/ws` and moves the markers in place as positions
+arrive — no page refresh, and popups stay open. If the socket drops,
+the map falls back to polling `GET /api/v1/tracking/vehicles` every
+10 seconds and says so in the status chip (Live tracking / Snapshot /
+Tracking offline). The same data is available over REST:
+`GET /api/v1/tracking/vehicles` (latest position per vehicle),
+`GET /api/v1/tracking/vehicles/{id}`, and
+`GET /api/v1/tracking/vehicles/nearby?latitude&longitude&radiusKm`.
+
+Positions are only ever recorded for vehicles the simulator has
+actually moved; a vehicle with no tracked position is placed by the
+map's fallback rules, never invented. Delivery is not simulated — an
+order only changes status through the order lifecycle actions.
+
+Simulator settings (`application.yml`, overridable by environment):
+
+- `TRACKING_ENABLED` (default `true`) — set to `false` to stop the simulator.
+- `TRACKING_TICK_MILLIS` (default `5000`) — how often each vehicle advances.
+- `TRACKING_SPEED_KMH` (default `40`) — simulated driving speed.
+
+Local development runs the frontend behind the `ng serve` proxy
+(`proxy.conf.json`, wired into `npm start`), so the app, the API and
+the WebSocket all share one origin. The backend sends no CORS headers,
+so calling `localhost:8080` directly from the browser is blocked.
 
 ## Development plan
 
