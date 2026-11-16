@@ -14,7 +14,7 @@ Open http://localhost:4200 and sign in as `dispatcher` / `changeme`.
 ## Walkthrough
 
 1. Dashboard tables load: vehicles, drivers, and orders from the sample dataset (8 vehicles, 8 drivers, 24 unassigned orders).
-2. Create a vehicle, a driver, and an order, then assign the order and move it through transit.
+2. Confirm the seeded fleet on the Dashboard — 8 vehicles, 8 drivers, 24 unassigned orders (550 kg total). Do not create vehicles, drivers, or orders by hand; the sample data seeds on first boot.
 3. On the fleet map, click Optimize routes and confirm the results card shows distance, duration, and unassigned orders.
 4. Create a dispatch plan from the optimization as DRAFT, assign a driver per route, then Approve. Confirm orders move to ASSIGNED and vehicles to ON_ROUTE.
 5. Report a breakdown for a vehicle on a plan. Confirm its active orders return to CREATED flagged for reassignment, then Reroute and Resolve.
